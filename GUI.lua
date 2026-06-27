@@ -1,5 +1,5 @@
 -- ============================================================
--- SWI SWI SWI HUB v4 - FLY FIXED + TP FIXED + NEW FEATURES
+-- SWI SWI SWI HUB v5 - SMART COLLECT + GENERATOR TRACKER
 -- ============================================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -474,7 +474,7 @@ local function stopFly()
     end
 end
 
-local flyBtn, flyRow = makeRow(advFrame, "Magic Carpet Fly", "Smooth fly. Joystick/WASD=move, UP/DN buttons or Space/Shift=up/down.", "Adv")
+local flyBtn, flyRow = makeRow(advFrame, "Magic Carpet Fly", "Smooth fly. UP/DN buttons appear when on.", "Adv")
 flyBtn.MouseButton1Click:Connect(function()
     local o = not flyBtn:GetAttribute("On")
     setOn(flyBtn, "Magic Carpet Fly", flyRow, o)
@@ -1168,84 +1168,218 @@ hideBtn.MouseButton1Click:Connect(function()
     if o then startHide() else stopHide() end
 end)
 
+-- ============================================================
+-- SMART COLLECT v2 - finds Tool objects
+-- ============================================================
 local collecting = {}
-local function findResource(kw)
-    local root = getRoot()
-    if not root then return nil end
-    local near, nd = nil, math.huge
+
+local function findDroppedItems(kw)
+    local items = {}
     pcall(function()
         for _, obj in ipairs(Workspace:GetDescendants()) do
-            local matchPos = nil
-            if obj:IsA("BasePart") then
-                matchPos = obj.Position
-            elseif obj:IsA("Model") and obj.PrimaryPart then
-                matchPos = obj.PrimaryPart.Position
-            elseif obj:IsA("Model") then
-                local p = obj:FindFirstChildWhichIsA("BasePart")
-                if p then matchPos = p.Position end
-            end
-            if matchPos then
+            if obj:IsA("Tool") then
                 local n = string.lower(obj.Name)
-                if string.find(n, kw) and not string.find(n, "gen") and not string.find(n, "spawn") and not string.find(n, "ui") then
-                    local d = (matchPos - root.Position).Magnitude
-                    if d < nd and d < 5000 and d > 2 then
-                        near, nd = obj, matchPos
+                if string.find(n, kw) then
+                    local handle = obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("BasePart")
+                    if handle then
+                        table.insert(items, {tool = obj, pos = handle.Position, handle = handle})
                     end
                 end
             end
         end
     end)
-    return near, nd
+    return items
 end
-local function startCollect(kw)
+
+local function findGenerators()
+    local gens = {}
+    pcall(function()
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            local n = string.lower(obj.Name)
+            if string.find(n, "gen") and not string.find(n, "ui") then
+                local pos = nil
+                if obj:IsA("BasePart") then
+                    pos = obj.Position
+                elseif obj:IsA("Model") then
+                    local p = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+                    if p then pos = p.Position end
+                end
+                if pos then
+                    local genType = "iron"
+                    if string.find(n, "emerald") then genType = "emerald"
+                    elseif string.find(n, "diamond") then genType = "diamond"
+                    elseif string.find(n, "gold") then genType = "gold" end
+                    table.insert(gens, {obj = obj, pos = pos, type = genType, name = obj.Name})
+                end
+            end
+        end
+    end)
+    return gens
+end
+
+local function startSmartCollect(kw, runOnce)
     if collecting[kw] then return end
     collecting[kw] = true
     task.spawn(function()
         while collecting[kw] do
             pcall(function()
                 local r = getRoot()
-                if r then
-                    local target, pos = findResource(kw)
-                    if target and pos then
-                        pcall(function() r.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end)
-                        r.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
-                        task.wait(0.2)
-                    else
-                        task.wait(0.5)
-                    end
-                else
+                if not r then
                     task.wait(0.5)
+                    return
+                end
+                local items = findDroppedItems(kw)
+                if #items == 0 then
+                    if runOnce then
+                        collecting[kw] = false
+                        return
+                    end
+                    task.wait(0.5)
+                    return
+                end
+                table.sort(items, function(a, b)
+                    return (a.pos - r.Position).Magnitude < (b.pos - r.Position).Magnitude
+                end)
+                local target = items[1]
+                pcall(function()
+                    r.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                    r.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                end)
+                r.CFrame = CFrame.new(target.pos + Vector3.new(0, 3, 0))
+                task.wait(0.3)
+                if not target.handle or not target.handle.Parent or not target.handle.Parent.Parent then
+                else
+                    if r and r.Parent then
+                        r.CFrame = CFrame.new(target.pos + Vector3.new(0, 3, 0))
+                    end
+                    task.wait(0.2)
                 end
             end)
-            task.wait(0.05)
+            task.wait(0.1)
         end
     end)
 end
-local function stopCollect(kw) collecting[kw] = false end
 
-local emeraldBtn, emeraldRow = makeRow(mainFrame, "Collect Emeralds", "Auto-TPs to nearest emerald.", "Main")
-emeraldBtn.MouseButton1Click:Connect(function()
-    local o = not emeraldBtn:GetAttribute("On")
-    setOn(emeraldBtn, "Collect Emeralds", emeraldRow, o)
-    if o then startCollect("emerald") else stopCollect("emerald") end
+local function stopSmartCollect(kw) collecting[kw] = false end
+
+local seBtn, seRow = makeRow(mainFrame, "Collect Emeralds", "Auto-collects emerald items from ground.", "Main")
+seBtn.MouseButton1Click:Connect(function()
+    local o = not seBtn:GetAttribute("On")
+    setOn(seBtn, "Collect Emeralds", seRow, o)
+    if o then startSmartCollect("emerald", false) else stopSmartCollect("emerald") end
 end)
-local diamondBtn, diamondRow = makeRow(mainFrame, "Collect Diamonds", "Auto-TPs to nearest diamond.", "Main")
-diamondBtn.MouseButton1Click:Connect(function()
-    local o = not diamondBtn:GetAttribute("On")
-    setOn(diamondBtn, "Collect Diamonds", diamondRow, o)
-    if o then startCollect("diamond") else stopCollect("diamond") end
+local sdBtn, sdRow = makeRow(mainFrame, "Collect Diamonds", "Auto-collects diamond items from ground.", "Main")
+sdBtn.MouseButton1Click:Connect(function()
+    local o = not sdBtn:GetAttribute("On")
+    setOn(sdBtn, "Collect Diamonds", sdRow, o)
+    if o then startSmartCollect("diamond", false) else stopSmartCollect("diamond") end
 end)
-local ironBtn, ironRow = makeRow(mainFrame, "Collect Iron", "Auto-TPs to nearest iron.", "Main")
-ironBtn.MouseButton1Click:Connect(function()
-    local o = not ironBtn:GetAttribute("On")
-    setOn(ironBtn, "Collect Iron", ironRow, o)
-    if o then startCollect("iron") else stopCollect("iron") end
+local siBtn, siRow = makeRow(mainFrame, "Collect Iron", "Auto-collects iron items from ground.", "Main")
+siBtn.MouseButton1Click:Connect(function()
+    local o = not siBtn:GetAttribute("On")
+    setOn(siBtn, "Collect Iron", siRow, o)
+    if o then startSmartCollect("iron", false) else stopSmartCollect("iron") end
 end)
-local goldBtn, goldRow = makeRow(mainFrame, "Collect Gold", "Auto-TPs to nearest gold.", "Main")
-goldBtn.MouseButton1Click:Connect(function()
-    local o = not goldBtn:GetAttribute("On")
-    setOn(goldBtn, "Collect Gold", goldRow, o)
-    if o then startCollect("gold") else stopCollect("gold") end
+local sgBtn, sgRow = makeRow(mainFrame, "Collect Gold", "Auto-collects gold items from ground.", "Main")
+sgBtn.MouseButton1Click:Connect(function()
+    local o = not sgBtn:GetAttribute("On")
+    setOn(sgBtn, "Collect Gold", sgRow, o)
+    if o then startSmartCollect("gold", false) else stopSmartCollect("gold") end
+end)
+
+local roeBtn, roeRow = makeRow(mainFrame, "Collect Emeralds (Once)", "One pass: TP to all emerald items, then stop.", "Main")
+roeBtn.MouseButton1Click:Connect(function()
+    setOn(roeBtn, "Collect Emeralds (Once)", roeRow, true)
+    task.spawn(function()
+        startSmartCollect("emerald", true)
+        task.wait(2)
+        setOn(roeBtn, "Collect Emeralds (Once)", roeRow, false)
+    end)
+end)
+local rodBtn, rodRow = makeRow(mainFrame, "Collect Diamonds (Once)", "One pass: TP to all diamond items, then stop.", "Main")
+rodBtn.MouseButton1Click:Connect(function()
+    setOn(rodBtn, "Collect Diamonds (Once)", rodRow, true)
+    task.spawn(function()
+        startSmartCollect("diamond", true)
+        task.wait(2)
+        setOn(rodBtn, "Collect Diamonds (Once)", rodRow, false)
+    end)
+end)
+
+-- ============================================================
+-- GENERATOR TRACKER HUD
+-- ============================================================
+local gTrackerF = Instance.new("Frame")
+gTrackerF.Size = UDim2.new(0, 200, 0, 200)
+gTrackerF.Position = UDim2.new(0, 16, 0, 90)
+gTrackerF.BackgroundColor3 = BG
+gTrackerF.BorderSizePixel = 0
+gTrackerF.Visible = false
+gTrackerF.ZIndex = 8
+gTrackerF.Parent = screenGui
+corner(gTrackerF, 6)
+stroke(gTrackerF, ACCENT, 1.5)
+
+local gTrackerTitle = Instance.new("TextLabel")
+gTrackerTitle.Size = UDim2.new(1, 0, 0, 20)
+gTrackerTitle.BackgroundTransparency = 1
+gTrackerTitle.Text = "  GENERATORS"
+gTrackerTitle.TextColor3 = ACCENT
+gTrackerTitle.Font = Enum.Font.GothamBold
+gTrackerTitle.TextSize = 10
+gTrackerTitle.TextXAlignment = Enum.TextXAlignment.Left
+gTrackerTitle.Parent = gTrackerF
+
+local gTrackerScroll = Instance.new("ScrollingFrame")
+gTrackerScroll.Size = UDim2.new(1, -8, 1, -28)
+gTrackerScroll.Position = UDim2.new(0, 4, 0, 24)
+gTrackerScroll.BackgroundTransparency = 1
+gTrackerScroll.BorderSizePixel = 0
+gTrackerScroll.ScrollBarThickness = 3
+gTrackerScroll.ScrollBarImageColor3 = ACCENT
+gTrackerScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+gTrackerScroll.Parent = gTrackerF
+
+local gTrackerConn
+local function startGTracker()
+    gTrackerF.Visible = true
+    gTrackerConn = RunService.Heartbeat:Connect(function()
+        for _, c in ipairs(gTrackerScroll:GetChildren()) do
+            if c:IsA("TextLabel") then c:Destroy() end
+        end
+        local gens = findGenerators()
+        local yOff = 0
+        for _, g in ipairs(gens) do
+            local r = getRoot()
+            local dist = r and math.floor((g.pos - r.Position).Magnitude) or 0
+            local l = Instance.new("TextLabel")
+            l.Size = UDim2.new(1, 0, 0, 16)
+            l.Position = UDim2.new(0, 0, 0, yOff)
+            l.BackgroundTransparency = 1
+            local col = "Iron"
+            if g.type == "emerald" then col = "Emerald"
+            elseif g.type == "diamond" then col = "Diamond"
+            elseif g.type == "gold" then col = "Gold" end
+            l.Text = "  " .. col .. " (" .. dist .. "m)"
+            l.TextColor3 = TXT
+            l.Font = Enum.Font.Gotham
+            l.TextSize = 10
+            l.TextXAlignment = Enum.TextXAlignment.Left
+            l.Parent = gTrackerScroll
+            yOff = yOff + 18
+        end
+        gTrackerScroll.CanvasSize = UDim2.new(0, 0, 0, yOff)
+    end)
+end
+local function stopGTracker()
+    gTrackerF.Visible = false
+    if gTrackerConn then gTrackerConn:Disconnect() gTrackerConn = nil end
+end
+local gtBtn, gtRow = makeRow(mainFrame, "Generator Tracker", "Shows all generators + distance.", "Main")
+gtBtn.MouseButton1Click:Connect(function()
+    local o = not gtBtn:GetAttribute("On")
+    setOn(gtBtn, "Generator Tracker", gtRow, o)
+    if o then startGTracker() else stopGTracker() end
 end)
 
 local aQ
@@ -1561,7 +1695,7 @@ player.CharacterAdded:Connect(function()
 end)
 
 _G.SwiSwiSwiCleanup = function()
-    for k in pairs(collecting) do stopCollect(k) end
+    for k in pairs(collecting) do stopSmartCollect(k) end
     stopAQ() stopH() stopBE() stopGE() stopPE() stopAE() stopCO()
     if fly then stopFly() end
     if noclipping then stopNoclip() end
@@ -1576,8 +1710,9 @@ _G.SwiSwiSwiCleanup = function()
     stopBridge()
     stopScaffold()
     stopSprint()
+    stopGTracker()
 end
 
 end)
 
-print("=== SWI SWI SWI HUB v4 - FULLY LOADED ===")
+print("=== SWI SWI SWI HUB v5 - FULLY LOADED ===")
