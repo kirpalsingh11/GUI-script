@@ -1,0 +1,2 @@
+# GUI-script
+Op(Bedwars)
