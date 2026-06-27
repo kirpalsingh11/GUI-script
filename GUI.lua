@@ -1,6 +1,4 @@
--- ============================================================
--- SWI SWI SWI HUB - FULL EDITION (clean, formatted, no errors)
--- ============================================================
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
