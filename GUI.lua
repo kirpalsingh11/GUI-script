@@ -1,5 +1,5 @@
 -- ============================================================
--- SWI SWI SWI HUB v3 - FULLY FIXED
+-- SWI SWI SWI HUB v4 - FLY FIXED + TP FIXED + NEW FEATURES
 -- ============================================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -7,6 +7,7 @@ local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
 local Lighting = game:GetService("Lighting")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -86,6 +87,45 @@ screenGui.ResetOnSpawn = false
 screenGui.IgnoreGuiInset = true
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = playerGui
+
+local upBtn = Instance.new("TextButton")
+upBtn.Size = UDim2.new(0, 60, 0, 60)
+upBtn.Position = UDim2.new(1, -70, 1, -180)
+upBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+upBtn.BorderSizePixel = 0
+upBtn.Text = "UP"
+upBtn.TextColor3 = ACCENT
+upBtn.Font = Enum.Font.GothamBold
+upBtn.TextSize = 16
+upBtn.ZIndex = 11
+upBtn.Visible = false
+upBtn.Parent = screenGui
+corner(upBtn, 8)
+stroke(upBtn, ACCENT, 1.5)
+
+local downBtn = Instance.new("TextButton")
+downBtn.Size = UDim2.new(0, 60, 0, 60)
+downBtn.Position = UDim2.new(1, -70, 1, -110)
+downBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+downBtn.BorderSizePixel = 0
+downBtn.Text = "DN"
+downBtn.TextColor3 = ACCENT
+downBtn.Font = Enum.Font.GothamBold
+downBtn.TextSize = 16
+downBtn.ZIndex = 11
+downBtn.Visible = false
+downBtn.Parent = screenGui
+corner(downBtn, 8)
+stroke(downBtn, ACCENT, 1.5)
+
+local upHeld = false
+local downHeld = false
+upBtn.MouseButton1Down:Connect(function() upHeld = true end)
+upBtn.MouseButton1Up:Connect(function() upHeld = false end)
+upBtn.MouseLeave:Connect(function() upHeld = false end)
+downBtn.MouseButton1Down:Connect(function() downHeld = true end)
+downBtn.MouseButton1Up:Connect(function() downHeld = false end)
+downBtn.MouseLeave:Connect(function() downHeld = false end)
 
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Name = "ToggleBox"
@@ -364,30 +404,33 @@ local function startFly()
     if not root or not humanoid then return end
     fly = true
     humanoid.PlatformStand = true
-
+    humanoid.AutoRotate = false
+    pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Physics) end)
+    upBtn.Visible = true
+    downBtn.Visible = true
+    pcall(function()
+        root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+    end)
     if flyAtt then flyAtt:Destroy() end
     flyAtt = Instance.new("Attachment")
     flyAtt.Name = "FlyAtt"
     flyAtt.Parent = root
-
     if flyLV then flyLV:Destroy() end
     flyLV = Instance.new("LinearVelocity")
     flyLV.Attachment0 = flyAtt
-    flyLV.MaxForce = 100000
+    flyLV.MaxForce = math.huge
     flyLV.RelativeTo = Enum.ActuatorRelativeTo.World
     flyLV.VectorVelocity = Vector3.new(0, 0, 0)
     flyLV.Parent = root
-
     if flyAO then flyAO:Destroy() end
     flyAO = Instance.new("AlignOrientation")
     flyAO.Attachment0 = flyAtt
     flyAO.Mode = Enum.OrientationAlignmentMode.OneAttachment
-    flyAO.MaxTorque = 50000
-    flyAO.Responsiveness = 25
+    flyAO.MaxTorque = math.huge
+    flyAO.Responsiveness = 30
     flyAO.Parent = root
-
     local currentVel = Vector3.new(0, 0, 0)
-
     flyConn = RunService.RenderStepped:Connect(function(dt)
         if not fly or not root.Parent then
             flyConn:Disconnect()
@@ -398,11 +441,11 @@ local function startFly()
         local tilt = flatMove.Magnitude
         local dir = tilt > 0.01 and flatMove.Unit or Vector3.new(0, 0, 0)
         local vY = 0
-        if UserInputService:IsKeyDown(Enum.KeyCode.Space) or UserInputService:IsKeyDown(Enum.KeyCode.E) then vY = vY + 1 end
-        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.Q) then vY = vY - 1 end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) or UserInputService:IsKeyDown(Enum.KeyCode.E) or upHeld then vY = vY + 1 end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.Q) or downHeld then vY = vY - 1 end
         local es = effSpeed()
         local targetVel = dir * (tilt * es) + Vector3.new(0, vY, 0) * es
-        local lerpFactor = math.clamp(dt * 10, 0, 1)
+        local lerpFactor = math.clamp(dt * 15, 0, 1)
         currentVel = currentVel:Lerp(targetVel, lerpFactor)
         if flyLV then flyLV.VectorVelocity = currentVel end
         local cam = Workspace.CurrentCamera.CFrame
@@ -420,11 +463,18 @@ local function stopFly()
     if flyLV then flyLV:Destroy() flyLV = nil end
     if flyAO then flyAO:Destroy() flyAO = nil end
     if flyAtt then flyAtt:Destroy() flyAtt = nil end
+    upBtn.Visible = false
+    downBtn.Visible = false
+    upHeld = false
+    downHeld = false
     local h = getHumanoid()
-    if h then h.PlatformStand = false end
+    if h then
+        h.PlatformStand = false
+        h.AutoRotate = true
+    end
 end
 
-local flyBtn, flyRow = makeRow(advFrame, "Magic Carpet Fly", "Smooth fly. WASD/joystick=move, Space/Shift=up/down.", "Adv")
+local flyBtn, flyRow = makeRow(advFrame, "Magic Carpet Fly", "Smooth fly. Joystick/WASD=move, UP/DN buttons or Space/Shift=up/down.", "Adv")
 flyBtn.MouseButton1Click:Connect(function()
     local o = not flyBtn:GetAttribute("On")
     setOn(flyBtn, "Magic Carpet Fly", flyRow, o)
@@ -537,19 +587,41 @@ local function doTeleportTo(targetPlayer)
         if myRoot and targetRoot then
             lastPos = myRoot.Position
             lastTpTarget = targetPlayer
+            pcall(function()
+                myRoot.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                myRoot.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+            end)
             local off = (targetRoot.CFrame.LookVector * -4) + Vector3.new(0, 2, 0)
             myRoot.CFrame = CFrame.new(targetRoot.Position + off, targetRoot.Position)
+            task.wait(0.05)
+            if myRoot and myRoot.Parent then
+                myRoot.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                myRoot.CFrame = CFrame.new(targetRoot.Position + off, targetRoot.Position)
+            end
         end
     end)
 end
+
 local function doTeleportBack()
     pcall(function()
         if lastPos then
             local r = getRoot()
-            if r then r.CFrame = CFrame.new(lastPos) end
+            if r then
+                pcall(function()
+                    r.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                    r.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                end)
+                r.CFrame = CFrame.new(lastPos)
+                task.wait(0.05)
+                if r and r.Parent then
+                    r.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                    r.CFrame = CFrame.new(lastPos)
+                end
+            end
         end
     end)
 end
+
 local function startAutoTp()
     if autoTpRun then return end
     autoTpRun = true
@@ -562,11 +634,21 @@ local function startAutoTp()
                     local targetRoot = lastTpTarget.Character:FindFirstChild("HumanoidRootPart")
                     if myRoot and targetRoot then
                         if not lastPos then lastPos = myRoot.Position end
+                        pcall(function() myRoot.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end)
                         local off = (targetRoot.CFrame.LookVector * -4) + Vector3.new(0, 2, 0)
                         myRoot.CFrame = CFrame.new(targetRoot.Position + off, targetRoot.Position)
+                        task.wait(0.05)
+                        if myRoot and myRoot.Parent then
+                            myRoot.CFrame = CFrame.new(targetRoot.Position + off, targetRoot.Position)
+                        end
                         task.wait(autoTpInterval)
                         if not autoTpRun then keepGoing = false return end
+                        pcall(function() myRoot.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end)
                         myRoot.CFrame = CFrame.new(lastPos)
+                        task.wait(0.05)
+                        if myRoot and myRoot.Parent then
+                            myRoot.CFrame = CFrame.new(lastPos)
+                        end
                         task.wait(autoTpInterval)
                     else
                         task.wait(0.2)
@@ -814,6 +896,149 @@ landBtn.MouseButton1Click:Connect(function()
     end)
 end)
 
+local antiFallActive, antiFallConn, safePos = false, nil, nil
+local function startAntiFall()
+    antiFallActive = true
+    safePos = nil
+    antiFallConn = RunService.Heartbeat:Connect(function()
+        if not antiFallActive then return end
+        local root = getRoot()
+        if not root then return end
+        local ray = Workspace:Raycast(root.Position, Vector3.new(0, -4, 0))
+        if ray then
+            safePos = root.Position
+        else
+            local vel = root.AssemblyLinearVelocity
+            if vel and vel.Y < -35 then
+                if safePos then
+                    pcall(function()
+                        root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                        root.CFrame = CFrame.new(safePos + Vector3.new(0, 1, 0))
+                    end)
+                end
+            end
+        end
+    end)
+end
+local function stopAntiFall()
+    antiFallActive = false
+    if antiFallConn then antiFallConn:Disconnect() antiFallConn = nil end
+end
+local afBtn, afRow = makeRow(advFrame, "Anti-Fall", "TPs you back if you fall off the map.", "Adv")
+afBtn.MouseButton1Click:Connect(function()
+    local o = not afBtn:GetAttribute("On")
+    setOn(afBtn, "Anti-Fall", afRow, o)
+    if o then startAntiFall() else stopAntiFall() end
+end)
+
+local bridgeActive, bridgeConn = false, nil
+local function findPlaceRemote()
+    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+            local n = string.lower(obj.Name)
+            if string.find(n, "place") or string.find(n, "build") or string.find(n, "block") then
+                return obj
+            end
+        end
+    end
+    return nil
+end
+local function startBridge()
+    bridgeActive = true
+    bridgeConn = RunService.Heartbeat:Connect(function()
+        if not bridgeActive then return end
+        local root = getRoot()
+        local humanoid = getHumanoid()
+        if not root or not humanoid then return end
+        if humanoid.MoveDirection.Magnitude < 0.1 then return end
+        local ray = Workspace:Raycast(root.Position, Vector3.new(0, -5, 0))
+        if not ray then
+            local remote = findPlaceRemote()
+            if remote then
+                pcall(function()
+                    if remote:IsA("RemoteEvent") then
+                        remote:FireServer(root.Position + Vector3.new(0, -3.5, 0))
+                    elseif remote:IsA("RemoteFunction") then
+                        remote:InvokeServer(root.Position + Vector3.new(0, -3.5, 0))
+                    end
+                end)
+            end
+        end
+    end)
+end
+local function stopBridge()
+    bridgeActive = false
+    if bridgeConn then bridgeConn:Disconnect() bridgeConn = nil end
+end
+local brBtn, brRow = makeRow(advFrame, "Bridge Assist", "Auto-places block when walking off edge.", "Adv")
+brBtn.MouseButton1Click:Connect(function()
+    local o = not brBtn:GetAttribute("On")
+    setOn(brBtn, "Bridge Assist", brRow, o)
+    if o then startBridge() else stopBridge() end
+end)
+
+local scaffoldActive, scaffoldConn = false, nil
+local function startScaffold()
+    scaffoldActive = true
+    scaffoldConn = RunService.Heartbeat:Connect(function()
+        if not scaffoldActive then return end
+        local root = getRoot()
+        local humanoid = getHumanoid()
+        if not root or not humanoid then return end
+        if humanoid.MoveDirection.Magnitude < 0.1 then return end
+        local ray = Workspace:Raycast(root.Position, Vector3.new(0, -4, 0))
+        if not ray then
+            local remote = findPlaceRemote()
+            if remote then
+                pcall(function()
+                    if remote:IsA("RemoteEvent") then
+                        remote:FireServer(root.Position + Vector3.new(0, -3, 0))
+                    elseif remote:IsA("RemoteFunction") then
+                        remote:InvokeServer(root.Position + Vector3.new(0, -3, 0))
+                    end
+                end)
+            end
+        end
+    end)
+end
+local function stopScaffold()
+    scaffoldActive = false
+    if scaffoldConn then scaffoldConn:Disconnect() scaffoldConn = nil end
+end
+local scBtn, scRow = makeRow(advFrame, "Scaffold", "Auto-places blocks below you while moving.", "Adv")
+scBtn.MouseButton1Click:Connect(function()
+    local o = not scBtn:GetAttribute("On")
+    setOn(scBtn, "Scaffold", scRow, o)
+    if o then startScaffold() else stopScaffold() end
+end)
+
+local sprintActive, sprintConn = false, nil
+local function startSprint()
+    sprintActive = true
+    sprintConn = RunService.Heartbeat:Connect(function()
+        if not sprintActive then return end
+        local h = getHumanoid()
+        if not h then return end
+        if h.MoveDirection.Magnitude > 0.1 then
+            if h.WalkSpeed < 24 then h.WalkSpeed = 24 end
+        else
+            if h.WalkSpeed > 20 then h.WalkSpeed = 16 end
+        end
+    end)
+end
+local function stopSprint()
+    sprintActive = false
+    if sprintConn then sprintConn:Disconnect() sprintConn = nil end
+    local h = getHumanoid()
+    if h then h.WalkSpeed = 16 end
+end
+local sp2Btn, sp2Row = makeRow(advFrame, "Auto-Sprint", "1.5x walk speed when moving.", "Adv")
+sp2Btn.MouseButton1Click:Connect(function()
+    local o = not sp2Btn:GetAttribute("On")
+    setOn(sp2Btn, "Auto-Sprint", sp2Row, o)
+    if o then startSprint() else stopSprint() end
+end)
+
 local infJump, infJumpConn
 local function startInfJump()
     infJump = true
@@ -944,7 +1169,6 @@ hideBtn.MouseButton1Click:Connect(function()
 end)
 
 local collecting = {}
-
 local function findResource(kw)
     local root = getRoot()
     if not root then return nil end
@@ -973,7 +1197,6 @@ local function findResource(kw)
     end)
     return near, nd
 end
-
 local function startCollect(kw)
     if collecting[kw] then return end
     collecting[kw] = true
@@ -984,6 +1207,7 @@ local function startCollect(kw)
                 if r then
                     local target, pos = findResource(kw)
                     if target and pos then
+                        pcall(function() r.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end)
                         r.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
                         task.wait(0.2)
                     else
@@ -997,7 +1221,6 @@ local function startCollect(kw)
         end
     end)
 end
-
 local function stopCollect(kw) collecting[kw] = false end
 
 local emeraldBtn, emeraldRow = makeRow(mainFrame, "Collect Emeralds", "Auto-TPs to nearest emerald.", "Main")
@@ -1349,8 +1572,12 @@ _G.SwiSwiSwiCleanup = function()
     if nightA then stopNight() end
     if hideA then stopHide() end
     stopAutoTp()
+    stopAntiFall()
+    stopBridge()
+    stopScaffold()
+    stopSprint()
 end
 
 end)
 
-print("=== SWI SWI SWI HUB - FULLY LOADED ===")
+print("=== SWI SWI SWI HUB v4 - FULLY LOADED ===")
