@@ -1,6 +1,6 @@
-
-
--- SWI SWI SWI HUB - FULL EDITION
+-- ============================================================
+-- SWI SWI SWI HUB v3 - FULLY FIXED
+-- ============================================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -56,6 +56,28 @@ local function getHumanoid()
     local c = getChar()
     if not c then return nil end
     return c:FindFirstChildOfClass("Humanoid")
+end
+
+local function getMoveVector()
+    local humanoid = getHumanoid()
+    if humanoid then
+        local md = humanoid.MoveDirection
+        if md and md.Magnitude > 0.01 then
+            return md
+        end
+    end
+    local x, z = 0, 0
+    if UserInputService:IsKeyDown(Enum.KeyCode.W) then z = z - 1 end
+    if UserInputService:IsKeyDown(Enum.KeyCode.S) then z = z + 1 end
+    if UserInputService:IsKeyDown(Enum.KeyCode.A) then x = x - 1 end
+    if UserInputService:IsKeyDown(Enum.KeyCode.D) then x = x + 1 end
+    if x == 0 and z == 0 then return Vector3.new(0, 0, 0) end
+    local cam = Workspace.CurrentCamera.CFrame
+    local forward = Vector3.new(cam.LookVector.X, 0, cam.LookVector.Z)
+    if forward.Magnitude > 0.001 then forward = forward.Unit end
+    local right = Vector3.new(cam.RightVector.X, 0, cam.RightVector.Z)
+    if right.Magnitude > 0.001 then right = right.Unit end
+    return (forward * -z + right * x)
 end
 
 local screenGui = Instance.new("ScreenGui")
@@ -333,83 +355,76 @@ local flySpeed = 60
 local boosting = false
 local function effSpeed() return flySpeed * (boosting and 3 or 1) end
 
-local fly, flyConn, carpet
-local function clearCarpet()
-    for _, obj in ipairs(Workspace:GetChildren()) do
-        if obj.Name == "MagicCarpet" then obj:Destroy() end
-    end
-    carpet = nil
-end
+local fly, flyConn
+local flyAtt, flyLV, flyAO
 
 local function startFly()
     local root = getRoot()
     local humanoid = getHumanoid()
     if not root or not humanoid then return end
     fly = true
-    clearCarpet()
     humanoid.PlatformStand = true
-    local c = Instance.new("Part")
-    c.Name = "MagicCarpet"
-    c.Size = Vector3.new(6, 0.5, 6)
-    c.Anchored = false
-    c.CanCollide = false
-    c.CanQuery = false
-    c.CanTouch = false
-    c.Transparency = 1
-    c.Massless = true
-    c.CFrame = root.CFrame * CFrame.new(0, -3.5, 0)
-    c.Parent = Workspace
-    carpet = c
-    local weld = Instance.new("WeldConstraint")
-    weld.Part0 = root
-    weld.Part1 = c
-    weld.Parent = c
-    local att = Instance.new("Attachment", c)
-    local lv = Instance.new("LinearVelocity")
-    lv.Attachment0 = att
-    lv.MaxForce = math.huge
-    lv.VectorVelocity = Vector3.new(0, 0, 0)
-    lv.Parent = c
-    local ao = Instance.new("AlignOrientation")
-    ao.Attachment0 = att
-    ao.Mode = Enum.OrientationAlignmentMode.OneAttachment
-    ao.MaxTorque = math.huge
-    ao.Responsiveness = 20
-    ao.Parent = c
+
+    if flyAtt then flyAtt:Destroy() end
+    flyAtt = Instance.new("Attachment")
+    flyAtt.Name = "FlyAtt"
+    flyAtt.Parent = root
+
+    if flyLV then flyLV:Destroy() end
+    flyLV = Instance.new("LinearVelocity")
+    flyLV.Attachment0 = flyAtt
+    flyLV.MaxForce = 100000
+    flyLV.RelativeTo = Enum.ActuatorRelativeTo.World
+    flyLV.VectorVelocity = Vector3.new(0, 0, 0)
+    flyLV.Parent = root
+
+    if flyAO then flyAO:Destroy() end
+    flyAO = Instance.new("AlignOrientation")
+    flyAO.Attachment0 = flyAtt
+    flyAO.Mode = Enum.OrientationAlignmentMode.OneAttachment
+    flyAO.MaxTorque = 50000
+    flyAO.Responsiveness = 25
+    flyAO.Parent = root
+
     local currentVel = Vector3.new(0, 0, 0)
+
     flyConn = RunService.RenderStepped:Connect(function(dt)
-        if not fly or not root.Parent or not c.Parent then
+        if not fly or not root.Parent then
             flyConn:Disconnect()
             return
         end
-        local cam = Workspace.CurrentCamera.CFrame
-        local look = cam.LookVector
-        local flat = Vector3.new(look.X, 0, look.Z)
-        if flat.Magnitude > 0.001 then
-            ao.CFrame = CFrame.lookAt(Vector3.new(), flat.Unit)
-        end
-        local md = humanoid.MoveDirection
-        local tilt = md.Magnitude
-        local dir = tilt > 0 and md.Unit or Vector3.new(0, 0, 0)
+        local moveVec = getMoveVector()
+        local flatMove = Vector3.new(moveVec.X, 0, moveVec.Z)
+        local tilt = flatMove.Magnitude
+        local dir = tilt > 0.01 and flatMove.Unit or Vector3.new(0, 0, 0)
         local vY = 0
         if UserInputService:IsKeyDown(Enum.KeyCode.Space) or UserInputService:IsKeyDown(Enum.KeyCode.E) then vY = vY + 1 end
         if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.Q) then vY = vY - 1 end
         local es = effSpeed()
-        local target = dir * (tilt * es) + Vector3.new(0, vY, 0) * es
-        currentVel = currentVel:Lerp(target, math.clamp(dt * 8, 0, 1))
-        lv.VectorVelocity = currentVel
+        local targetVel = dir * (tilt * es) + Vector3.new(0, vY, 0) * es
+        local lerpFactor = math.clamp(dt * 10, 0, 1)
+        currentVel = currentVel:Lerp(targetVel, lerpFactor)
+        if flyLV then flyLV.VectorVelocity = currentVel end
+        local cam = Workspace.CurrentCamera.CFrame
+        local look = cam.LookVector
+        local flatLook = Vector3.new(look.X, 0, look.Z)
+        if flatLook.Magnitude > 0.001 and flyAO then
+            flyAO.CFrame = CFrame.lookAt(Vector3.new(), flatLook.Unit)
+        end
     end)
 end
 
 local function stopFly()
     fly = false
     if flyConn then flyConn:Disconnect() flyConn = nil end
+    if flyLV then flyLV:Destroy() flyLV = nil end
+    if flyAO then flyAO:Destroy() flyAO = nil end
+    if flyAtt then flyAtt:Destroy() flyAtt = nil end
     local h = getHumanoid()
     if h then h.PlatformStand = false end
-    clearCarpet()
 end
 
-local flyBtn, flyRow = makeRow(advFrame, "Magic Carpet Fly", "Smooth invisible carpet. WASD=move, Space/Shift=up/down.", "Adv")
+local flyBtn, flyRow = makeRow(advFrame, "Magic Carpet Fly", "Smooth fly. WASD/joystick=move, Space/Shift=up/down.", "Adv")
 flyBtn.MouseButton1Click:Connect(function()
     local o = not flyBtn:GetAttribute("On")
     setOn(flyBtn, "Magic Carpet Fly", flyRow, o)
@@ -514,6 +529,7 @@ invisBtn.MouseButton1Click:Connect(function()
 end)
 
 local lastPos, lastTpTarget, autoTpRun, autoTpInterval = nil, nil, false, 1.0
+
 local function doTeleportTo(targetPlayer)
     pcall(function()
         local myRoot = getRoot()
@@ -928,25 +944,36 @@ hideBtn.MouseButton1Click:Connect(function()
 end)
 
 local collecting = {}
+
 local function findResource(kw)
     local root = getRoot()
     if not root then return nil end
     local near, nd = nil, math.huge
     pcall(function()
         for _, obj in ipairs(Workspace:GetDescendants()) do
+            local matchPos = nil
             if obj:IsA("BasePart") then
+                matchPos = obj.Position
+            elseif obj:IsA("Model") and obj.PrimaryPart then
+                matchPos = obj.PrimaryPart.Position
+            elseif obj:IsA("Model") then
+                local p = obj:FindFirstChildWhichIsA("BasePart")
+                if p then matchPos = p.Position end
+            end
+            if matchPos then
                 local n = string.lower(obj.Name)
                 if string.find(n, kw) and not string.find(n, "gen") and not string.find(n, "spawn") and not string.find(n, "ui") then
-                    local d = (obj.Position - root.Position).Magnitude
-                    if d < nd and d < 5000 then
-                        near, nd = obj, d
+                    local d = (matchPos - root.Position).Magnitude
+                    if d < nd and d < 5000 and d > 2 then
+                        near, nd = obj, matchPos
                     end
                 end
             end
         end
     end)
-    return near
+    return near, nd
 end
+
 local function startCollect(kw)
     if collecting[kw] then return end
     collecting[kw] = true
@@ -955,10 +982,10 @@ local function startCollect(kw)
             pcall(function()
                 local r = getRoot()
                 if r then
-                    local t = findResource(kw)
-                    if t then
-                        r.CFrame = CFrame.new(t.Position + Vector3.new(0, 3, 0))
-                        task.wait(0.18)
+                    local target, pos = findResource(kw)
+                    if target and pos then
+                        r.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
+                        task.wait(0.2)
                     else
                         task.wait(0.5)
                     end
@@ -970,6 +997,7 @@ local function startCollect(kw)
         end
     end)
 end
+
 local function stopCollect(kw) collecting[kw] = false end
 
 local emeraldBtn, emeraldRow = makeRow(mainFrame, "Collect Emeralds", "Auto-TPs to nearest emerald.", "Main")
@@ -1270,7 +1298,7 @@ local function startCO()
         coL.Size = UDim2.new(0, 180, 0, 20)
         coL.Position = UDim2.new(0, 8, 0, 50)
         coL.BackgroundColor3 = BG
-        coL.BorderSizePixel =0
+        coL.BorderSizePixel = 0
         coL.Text = " X:0 Y:0 Z:0"
         coL.TextColor3 = ACCENT
         coL.Font = Enum.Font.GothamBold
@@ -1326,3 +1354,5 @@ end
 end)
 
 print("=== SWI SWI SWI HUB - FULLY LOADED ===")
+
+    
