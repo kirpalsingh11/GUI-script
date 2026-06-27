@@ -1,4 +1,6 @@
 
+
+-- SWI SWI SWI HUB - FULL EDITION
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -537,6 +539,7 @@ local function startAutoTp()
     autoTpRun = true
     task.spawn(function()
         while autoTpRun do
+            local keepGoing = true
             pcall(function()
                 if lastTpTarget and lastTpTarget.Character and lastTpTarget.Character:FindFirstChild("HumanoidRootPart") then
                     local myRoot = getRoot()
@@ -546,7 +549,7 @@ local function startAutoTp()
                         local off = (targetRoot.CFrame.LookVector * -4) + Vector3.new(0, 2, 0)
                         myRoot.CFrame = CFrame.new(targetRoot.Position + off, targetRoot.Position)
                         task.wait(autoTpInterval)
-                        if not autoTpRun then break end
+                        if not autoTpRun then keepGoing = false return end
                         myRoot.CFrame = CFrame.new(lastPos)
                         task.wait(autoTpInterval)
                     else
@@ -556,6 +559,7 @@ local function startAutoTp()
                     task.wait(0.2)
                 end
             end)
+            if not keepGoing then return end
             task.wait(0.05)
         end
     end)
@@ -1266,7 +1270,7 @@ local function startCO()
         coL.Size = UDim2.new(0, 180, 0, 20)
         coL.Position = UDim2.new(0, 8, 0, 50)
         coL.BackgroundColor3 = BG
-        coL.BorderSizePixel = 0
+        coL.BorderSizePixel =0
         coL.Text = " X:0 Y:0 Z:0"
         coL.TextColor3 = ACCENT
         coL.Font = Enum.Font.GothamBold
