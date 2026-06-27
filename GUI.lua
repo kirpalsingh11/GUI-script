@@ -1,5 +1,5 @@
 -- ============================================================
--- SWI SWI SWI HUB v5 - SMART COLLECT + GENERATOR TRACKER
+-- SWI SWI SWI HUB v6 - FLY/TP/NOCLIP/COLLECT FIXED
 -- ============================================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -391,49 +391,59 @@ print("=== SWI HUB BASE LOADED ===")
 
 pcall(function()
 
+-- ============================================================
+-- FLY v6 - BodyVelocity + FULL humanoid reset on stop
+-- ============================================================
 local flySpeed = 60
 local boosting = false
 local function effSpeed() return flySpeed * (boosting and 3 or 1) end
 
-local fly, flyConn
-local flyAtt, flyLV, flyAO
+local fly = false
+local flyBV, flyBG, flyAtt
 
 local function startFly()
     local root = getRoot()
     local humanoid = getHumanoid()
     if not root or not humanoid then return end
     fly = true
+
+    if flyBV then flyBV:Destroy() end
+    if flyBG then flyBG:Destroy() end
+    if flyAtt then flyAtt:Destroy() end
+
     humanoid.PlatformStand = true
-    humanoid.AutoRotate = false
-    pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Physics) end)
+
     upBtn.Visible = true
     downBtn.Visible = true
+
     pcall(function()
         root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
         root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
     end)
-    if flyAtt then flyAtt:Destroy() end
-    flyAtt = Instance.new("Attachment")
-    flyAtt.Name = "FlyAtt"
-    flyAtt.Parent = root
-    if flyLV then flyLV:Destroy() end
-    flyLV = Instance.new("LinearVelocity")
-    flyLV.Attachment0 = flyAtt
-    flyLV.MaxForce = math.huge
-    flyLV.RelativeTo = Enum.ActuatorRelativeTo.World
-    flyLV.VectorVelocity = Vector3.new(0, 0, 0)
-    flyLV.Parent = root
-    if flyAO then flyAO:Destroy() end
-    flyAO = Instance.new("AlignOrientation")
-    flyAO.Attachment0 = flyAtt
-    flyAO.Mode = Enum.OrientationAlignmentMode.OneAttachment
-    flyAO.MaxTorque = math.huge
-    flyAO.Responsiveness = 30
-    flyAO.Parent = root
-    local currentVel = Vector3.new(0, 0, 0)
-    flyConn = RunService.RenderStepped:Connect(function(dt)
+
+    flyBV = Instance.new("BodyVelocity")
+    flyBV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    flyBV.Velocity = Vector3.new(0, 0, 0)
+    flyBV.Parent = root
+
+    flyBG = Instance.new("BodyGyro")
+    flyBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    flyBG.D = 100
+    flyBG.P = 10000
+    flyBG.CFrame = root.CFrame
+    flyBG.Parent = root
+
+    task.spawn(function()
+        while fly do
+            if humanoid then humanoid.PlatformStand = true end
+            task.wait(0.5)
+        end
+    end)
+
+    local flyLoopConn
+    flyLoopConn = RunService.Heartbeat:Connect(function()
         if not fly or not root.Parent then
-            flyConn:Disconnect()
+            flyLoopConn:Disconnect()
             return
         end
         local moveVec = getMoveVector()
@@ -445,32 +455,44 @@ local function startFly()
         if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.Q) or downHeld then vY = vY - 1 end
         local es = effSpeed()
         local targetVel = dir * (tilt * es) + Vector3.new(0, vY, 0) * es
-        local lerpFactor = math.clamp(dt * 15, 0, 1)
-        currentVel = currentVel:Lerp(targetVel, lerpFactor)
-        if flyLV then flyLV.VectorVelocity = currentVel end
+        if flyBV then flyBV.Velocity = targetVel end
         local cam = Workspace.CurrentCamera.CFrame
         local look = cam.LookVector
         local flatLook = Vector3.new(look.X, 0, look.Z)
-        if flatLook.Magnitude > 0.001 and flyAO then
-            flyAO.CFrame = CFrame.lookAt(Vector3.new(), flatLook.Unit)
+        if flatLook.Magnitude > 0.001 and flyBG then
+            flyBG.CFrame = CFrame.lookAt(Vector3.new(), flatLook.Unit)
         end
     end)
+    _G.SwiFlyLoopConn = flyLoopConn
 end
 
 local function stopFly()
     fly = false
-    if flyConn then flyConn:Disconnect() flyConn = nil end
-    if flyLV then flyLV:Destroy() flyLV = nil end
-    if flyAO then flyAO:Destroy() flyAO = nil end
+    if _G.SwiFlyLoopConn then
+        _G.SwiFlyLoopConn:Disconnect()
+        _G.SwiFlyLoopConn = nil
+    end
+    if flyBV then flyBV:Destroy() flyBV = nil end
+    if flyBG then flyBG:Destroy() flyBG = nil end
     if flyAtt then flyAtt:Destroy() flyAtt = nil end
     upBtn.Visible = false
     downBtn.Visible = false
     upHeld = false
     downHeld = false
     local h = getHumanoid()
+    local root = getRoot()
     if h then
         h.PlatformStand = false
         h.AutoRotate = true
+        h.WalkSpeed = 16
+        pcall(function() h:ChangeState(Enum.HumanoidStateType.GettingUp) end)
+        pcall(function() h:ChangeState(Enum.HumanoidStateType.Running) end)
+    end
+    if root then
+        pcall(function()
+            root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+        end)
     end
 end
 
@@ -481,6 +503,9 @@ flyBtn.MouseButton1Click:Connect(function()
     if o then startFly() else stopFly() end
 end)
 
+-- ============================================================
+-- NOCLIP v6 - keeps HRP collidable, doesn't fall through floor
+-- ============================================================
 local noclipping, noclipConn
 local function startNoclip()
     noclipping = true
@@ -489,7 +514,11 @@ local function startNoclip()
         local c = getChar()
         if not c then return end
         for _, p in ipairs(c:GetDescendants()) do
-            if p:IsA("BasePart") and p.CanCollide then p.CanCollide = false end
+            if p:IsA("BasePart") and p.CanCollide then
+                if p.Name ~= "HumanoidRootPart" then
+                    p.CanCollide = false
+                end
+            end
         end
     end)
 end
@@ -499,17 +528,20 @@ local function stopNoclip()
     local c = getChar()
     if c then
         for _, p in ipairs(c:GetDescendants()) do
-            if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then p.CanCollide = true end
+            if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
+                p.CanCollide = true
+            end
         end
     end
 end
-local noclipBtn, noclipRow = makeRow(advFrame, "NoClip", "Walk through walls.", "Adv")
+local noclipBtn, noclipRow = makeRow(advFrame, "NoClip", "Walk through walls. Doesn't make you fall.", "Adv")
 noclipBtn.MouseButton1Click:Connect(function()
     local o = not noclipBtn:GetAttribute("On")
     setOn(noclipBtn, "NoClip", noclipRow, o)
     if o then startNoclip() else stopNoclip() end
 end)
 
+-- INVISIBILITY
 local invisible = false
 local function applyLocalInvis(s)
     local c = getChar()
@@ -578,6 +610,9 @@ invisBtn.MouseButton1Click:Connect(function()
     if o then startInvis() else stopInvis() end
 end)
 
+-- ============================================================
+-- TP v6 - single TP + brief anchor (no rubber-band)
+-- ============================================================
 local lastPos, lastTpTarget, autoTpRun, autoTpInterval = nil, nil, false, 1.0
 
 local function doTeleportTo(targetPlayer)
@@ -587,17 +622,17 @@ local function doTeleportTo(targetPlayer)
         if myRoot and targetRoot then
             lastPos = myRoot.Position
             lastTpTarget = targetPlayer
+
+            local wasAnchored = myRoot.Anchored
+            myRoot.Anchored = true
             pcall(function()
                 myRoot.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
                 myRoot.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
             end)
             local off = (targetRoot.CFrame.LookVector * -4) + Vector3.new(0, 2, 0)
             myRoot.CFrame = CFrame.new(targetRoot.Position + off, targetRoot.Position)
-            task.wait(0.05)
-            if myRoot and myRoot.Parent then
-                myRoot.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                myRoot.CFrame = CFrame.new(targetRoot.Position + off, targetRoot.Position)
-            end
+            task.wait(0.1)
+            myRoot.Anchored = wasAnchored
         end
     end)
 end
@@ -607,16 +642,15 @@ local function doTeleportBack()
         if lastPos then
             local r = getRoot()
             if r then
+                local wasAnchored = r.Anchored
+                r.Anchored = true
                 pcall(function()
                     r.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
                     r.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
                 end)
                 r.CFrame = CFrame.new(lastPos)
-                task.wait(0.05)
-                if r and r.Parent then
-                    r.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                    r.CFrame = CFrame.new(lastPos)
-                end
+                task.wait(0.1)
+                r.Anchored = wasAnchored
             end
         end
     end)
@@ -634,21 +668,23 @@ local function startAutoTp()
                     local targetRoot = lastTpTarget.Character:FindFirstChild("HumanoidRootPart")
                     if myRoot and targetRoot then
                         if not lastPos then lastPos = myRoot.Position end
+                        local wasAnchored = myRoot.Anchored
+                        myRoot.Anchored = true
                         pcall(function() myRoot.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end)
                         local off = (targetRoot.CFrame.LookVector * -4) + Vector3.new(0, 2, 0)
                         myRoot.CFrame = CFrame.new(targetRoot.Position + off, targetRoot.Position)
-                        task.wait(0.05)
-                        if myRoot and myRoot.Parent then
-                            myRoot.CFrame = CFrame.new(targetRoot.Position + off, targetRoot.Position)
-                        end
+                        task.wait(0.1)
+                        myRoot.Anchored = wasAnchored
+
                         task.wait(autoTpInterval)
                         if not autoTpRun then keepGoing = false return end
+
+                        wasAnchored = myRoot.Anchored
+                        myRoot.Anchored = true
                         pcall(function() myRoot.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end)
                         myRoot.CFrame = CFrame.new(lastPos)
-                        task.wait(0.05)
-                        if myRoot and myRoot.Parent then
-                            myRoot.CFrame = CFrame.new(lastPos)
-                        end
+                        task.wait(0.1)
+                        myRoot.Anchored = wasAnchored
                         task.wait(autoTpInterval)
                     else
                         task.wait(0.2)
@@ -1169,23 +1205,30 @@ hideBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ============================================================
--- SMART COLLECT v2 - finds Tool objects
+-- SMART COLLECT v3 - filters out player-held items, closer TP
 -- ============================================================
 local collecting = {}
 
 local function findDroppedItems(kw)
     local items = {}
     pcall(function()
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if obj:IsA("Tool") then
-                local n = string.lower(obj.Name)
-                if string.find(n, kw) then
-                    local handle = obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("BasePart")
-                    if handle then
-                        table.insert(items, {tool = obj, pos = handle.Position, handle = handle})
+        for _, obj in ipairs(Workspace:GetChildren()) do
+            local function scanObj(o)
+                if o:IsA("Tool") then
+                    local n = string.lower(o.Name)
+                    if string.find(n, kw) then
+                        local handle = o:FindFirstChild("Handle") or o:FindFirstChildWhichIsA("BasePart")
+                        if handle and handle.Parent == o then
+                            table.insert(items, {tool = o, pos = handle.Position, handle = handle})
+                        end
+                    end
+                else
+                    for _, child in ipairs(o:GetChildren()) do
+                        scanObj(child)
                     end
                 end
             end
+            scanObj(obj)
         end
     end)
     return items
@@ -1241,19 +1284,16 @@ local function startSmartCollect(kw, runOnce)
                     return (a.pos - r.Position).Magnitude < (b.pos - r.Position).Magnitude
                 end)
                 local target = items[1]
+                local wasAnchored = r.Anchored
+                r.Anchored = true
                 pcall(function()
                     r.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
                     r.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
                 end)
-                r.CFrame = CFrame.new(target.pos + Vector3.new(0, 3, 0))
-                task.wait(0.3)
-                if not target.handle or not target.handle.Parent or not target.handle.Parent.Parent then
-                else
-                    if r and r.Parent then
-                        r.CFrame = CFrame.new(target.pos + Vector3.new(0, 3, 0))
-                    end
-                    task.wait(0.2)
-                end
+                r.CFrame = CFrame.new(target.pos + Vector3.new(0, 1.5, 0))
+                task.wait(0.15)
+                r.Anchored = wasAnchored
+                task.wait(0.5)
             end)
             task.wait(0.1)
         end
@@ -1292,7 +1332,7 @@ roeBtn.MouseButton1Click:Connect(function()
     setOn(roeBtn, "Collect Emeralds (Once)", roeRow, true)
     task.spawn(function()
         startSmartCollect("emerald", true)
-        task.wait(2)
+        task.wait(3)
         setOn(roeBtn, "Collect Emeralds (Once)", roeRow, false)
     end)
 end)
@@ -1301,14 +1341,12 @@ rodBtn.MouseButton1Click:Connect(function()
     setOn(rodBtn, "Collect Diamonds (Once)", rodRow, true)
     task.spawn(function()
         startSmartCollect("diamond", true)
-        task.wait(2)
+        task.wait(3)
         setOn(rodBtn, "Collect Diamonds (Once)", rodRow, false)
     end)
 end)
 
--- ============================================================
 -- GENERATOR TRACKER HUD
--- ============================================================
 local gTrackerF = Instance.new("Frame")
 gTrackerF.Size = UDim2.new(0, 200, 0, 200)
 gTrackerF.Position = UDim2.new(0, 16, 0, 90)
@@ -1715,4 +1753,4 @@ end
 
 end)
 
-print("=== SWI SWI SWI HUB v5 - FULLY LOADED ===")
+print("=== SWI SWI SWI HUB v6 - FULLY LOADED ===")
