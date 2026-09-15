@@ -1,1488 +1,964 @@
+-- ============================================================
+--  CHEAT SIMULATOR — Main LocalScript
+--  Place in: StarterPlayerScripts
+--  All features FREE for testing (gamepass gating removed)
+-- ============================================================
 
--- ⚡ CHEAT SIMULATOR - ULTIMATE NEON RAGE MENU ⚡
--- All features fixed + 10 new super cheats
--- LocalScript in StarterGui
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
+local Players        = game:GetService("Players")
+local RunService     = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
-local HttpService = game:GetService("HttpService")
-local StarterGui = game:GetService("StarterGui")
-local TeleportService = game:GetService("TeleportService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Lighting = game:GetService("Lighting")
-local SoundService = game:GetService("SoundService")
+local TweenService   = game:GetService("TweenService")
+local Workspace      = game:GetService("Workspace")
 
-local player = Players.LocalPlayer
-local mouse = player:GetMouse()
-local camera = Workspace.CurrentCamera
+local LocalPlayer   = Players.LocalPlayer
+local PlayerGui     = LocalPlayer:WaitForChild("PlayerGui")
+local Camera        = Workspace.CurrentCamera
 
--- ============= NEON COLOR SYSTEM =============
-local neonPink = Color3.fromRGB(255, 20, 147)
-local neonCyan = Color3.fromRGB(0, 255, 255)
-local neonGreen = Color3.fromRGB(57, 255, 20)
-local neonPurple = Color3.fromRGB(191, 0, 255)
-local neonOrange = Color3.fromRGB(255, 140, 0)
-local neonYellow = Color3.fromRGB(255, 255, 0)
-local neonRed = Color3.fromRGB(255, 30, 30)
-local neonBlue = Color3.fromRGB(30, 144, 255)
-local darkBg = Color3.fromRGB(8, 8, 15)
-local darkPanel = Color3.fromRGB(12, 12, 22)
-local neonColors = {neonPink, neonCyan, neonGreen, neonPurple, neonOrange, neonYellow, neonBlue}
+-- ============================================================
+--  CONFIG  (tweak these values to tune the cheats)
+-- ============================================================
+local CFG = {
+    -- Aimbot
+    AimbotEnabled      = false,
+    AimbotFOV          = 300,       -- studs — how far aimbot locks on
+    AimbotSmoothing    = 0.15,      -- 0 = instant snap, 1 = very slow
+    AimbotHeadlock     = true,      -- aim at head vs HumanoidRootPart
 
-local rainbowIndex = 1
-local rainbowEnabled = true
+    -- Kill Aura
+    KillAuraEnabled    = false,
+    KillAuraDamage     = 15,        -- damage per hit
+    KillAuraRange      = 40,        -- studs radius
+    KillAuraRate       = 0.4,       -- seconds between hits
 
-spawn(function()
-	while task.wait(0.05) do
-		if rainbowEnabled then
-			rainbowIndex = rainbowIndex % #neonColors + 1
-		end
-	end
-end)
+    -- Anti-Void Scaffold
+    ScaffoldEnabled    = false,
+    ScaffoldTriggerY   = 10,        -- Y level below which scaffold activates
+    ScaffoldMaterial   = Enum.Material.SmoothPlastic,
+    ScaffoldColor      = BrickColor.new("Bright blue"),
+    ScaffoldLifetime   = 6,         -- seconds before scaffold block disappears
 
--- ============= GUI SETUP =============
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "NeonCheatMenu"
-screenGui.Parent = player:WaitForChild("PlayerGui")
-screenGui.ResetOnSpawn = false
-screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    -- Speed Hack
+    SpeedEnabled       = false,
+    SpeedMultiplier    = 2.5,
 
-local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 370, 0, 460)
-mainFrame.Position = UDim2.new(0.5, -185, 0.08, 0)
-mainFrame.BackgroundColor3 = darkBg
-mainFrame.BorderSizePixel = 0
-mainFrame.Active = true
-mainFrame.Draggable = true
-mainFrame.Parent = screenGui
-mainFrame.ClipsDescendants = true
+    -- High Jump
+    HighJumpEnabled    = false,
+    HighJumpPower      = 100,
 
-local borderGlow = Instance.new("Frame")
-borderGlow.Size = UDim2.new(1, 4, 1, 4)
-borderGlow.Position = UDim2.new(0, -2, 0, -2)
-borderGlow.BackgroundColor3 = neonPink
-borderGlow.BorderSizePixel = 0
-borderGlow.BackgroundTransparency = 0.3
-borderGlow.Parent = mainFrame
-borderGlow.ZIndex = 0
+    -- Fly
+    FlyEnabled         = false,
+    FlySpeed           = 60,
 
-spawn(function()
-	while task.wait(0.1) do
-		if rainbowEnabled then
-			borderGlow.BackgroundColor3 = neonColors[rainbowIndex]
-		end
-	end
-end)
+    -- Infinite Stamina (just keeps jump available)
+    InfJumpEnabled     = false,
+    InfJumpCount       = 0,         -- internal counter
 
-Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 8)
+    -- Auto Collect (pulls nearby parts/pickups toward you)
+    AutoCollectEnabled = false,
+    AutoCollectRange   = 20,
 
--- Title Bar
-local titleBar = Instance.new("Frame")
-titleBar.Size = UDim2.new(1, 0, 0, 34)
-titleBar.BackgroundColor3 = darkPanel
-titleBar.BorderSizePixel = 0
-titleBar.Parent = mainFrame
+    -- Ghost Mode (no collision with other players)
+    GhostEnabled       = false,
 
-local titleGlow = Instance.new("Frame")
-titleGlow.Size = UDim2.new(1, 0, 0, 2)
-titleGlow.Position = UDim2.new(0, 0, 1, 0)
-titleGlow.BackgroundColor3 = neonPink
-titleGlow.BorderSizePixel = 0
-titleGlow.Parent = titleBar
+    -- Trajectory Predictor (shows where a thrown tool lands)
+    TrajectoryEnabled  = false,
 
-spawn(function()
-	while task.wait(0.1) do
-		if rainbowEnabled then
-			titleGlow.BackgroundColor3 = neonColors[rainbowIndex]
-		end
-	end
-end)
+    -- Radar (minimap dots for all players)
+    RadarEnabled       = false,
 
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -30, 1, 0)
-title.Position = UDim2.new(0, 10, 0, 0)
-title.Text = "⚡ ULTIMATE CHEAT MENU ⚡"
-title.TextColor3 = neonPink
-title.BackgroundTransparency = 1
-title.Font = Enum.Font.GothamBlack
-title.TextSize = 15
-title.TextXAlignment = Enum.TextXAlignment.Left
-title.Parent = titleBar
+    -- ESP (name + health above players through walls)
+    ESPEnabled         = false,
+}
 
-spawn(function()
-	while task.wait(0.1) do
-		if rainbowEnabled then
-			title.TextColor3 = neonColors[rainbowIndex]
-		end
-	end
-end)
+-- Internal state
+local _killAuraTimer  = 0
+local _scaffoldCooldown = 0
+local _flyBodyVelocity  = nil
+local _flyBodyGyro      = nil
+local _espBillboards    = {}
+local _radarDots        = {}
+local _configKey        = "CheatSimCFG_v1"
 
-local closeButton = Instance.new("TextButton")
-closeButton.Size = UDim2.new(0, 26, 0, 26)
-closeButton.Position = UDim2.new(1, -30, 0, 4)
-closeButton.Text = "✕"
-closeButton.BackgroundColor3 = neonRed
-closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-closeButton.Font = Enum.Font.GothamBold
-closeButton.TextSize = 16
-closeButton.BorderSizePixel = 0
-closeButton.Parent = mainFrame
-Instance.new("UICorner", closeButton).CornerRadius = UDim.new(0, 13)
-
--- Tab System
-local tabs = {}
-local tabNames = {"⚔️ Combat", "🔫 Rage", "👁️ Visuals", "🎮 Movement", "🧨 Troll", "😂 Memes", "⚙️ Config"}
-local tabPages = {}
-local activeTab = 1
-
-local tabContainer = Instance.new("ScrollingFrame")
-tabContainer.Size = UDim2.new(1, 0, 0, 32)
-tabContainer.Position = UDim2.new(0, 0, 0, 36)
-tabContainer.BackgroundColor3 = darkPanel
-tabContainer.BorderSizePixel = 0
-tabContainer.CanvasSize = UDim2.new(0, #tabNames * 55, 0, 0)
-tabContainer.ScrollBarThickness = 0
-tabContainer.Parent = mainFrame
-
-for i, name in ipairs(tabNames) do
-	local tab = Instance.new("TextButton")
-	tab.Size = UDim2.new(0, 50, 1, -2)
-	tab.Position = UDim2.new(0, (i-1)*52 + 2, 0, 1)
-	tab.Text = name
-	tab.BackgroundColor3 = i == 1 and neonPurple or Color3.fromRGB(20, 20, 30)
-	tab.TextColor3 = Color3.fromRGB(255, 255, 255)
-	tab.Font = Enum.Font.GothamBold
-	tab.TextSize = 8
-	tab.BorderSizePixel = 0
-	tab.Parent = tabContainer
-	Instance.new("UICorner", tab).CornerRadius = UDim.new(0, 4)
-	
-	local page = Instance.new("ScrollingFrame")
-	page.Size = UDim2.new(1, -6, 1, -74)
-	page.Position = UDim2.new(0, 3, 0, 70)
-	page.BackgroundTransparency = 1
-	page.BorderSizePixel = 0
-	page.CanvasSize = UDim2.new(0, 0, 0, 900)
-	page.ScrollBarThickness = 4
-	page.ScrollBarImageColor3 = neonPurple
-	page.Visible = (i == 1)
-	page.Parent = mainFrame
-	tabPages[i] = page
-	
-	tab.MouseButton1Click:Connect(function()
-		for j, t in ipairs(tabs) do
-			t.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-			tabPages[j].Visible = false
-		end
-		tab.BackgroundColor3 = neonPurple
-		page.Visible = true
-		activeTab = i
-	end)
-	
-	tabs[i] = tab
+-- ============================================================
+--  UTILITY
+-- ============================================================
+local function getCharacter()
+    return LocalPlayer.Character
 end
 
--- ============= HELPER FUNCTIONS =============
-local yOffsets = {}
-
-local function getY(pageNum)
-	if not yOffsets[pageNum] then yOffsets[pageNum] = 5 end
-	local y = yOffsets[pageNum]
-	yOffsets[pageNum] = y + 28
-	return y
+local function getHRP()
+    local c = getCharacter()
+    return c and c:FindFirstChild("HumanoidRootPart")
 end
 
-local function addSection(pageNum, text)
-	local y = getY(pageNum) + 5
-	local section = Instance.new("Frame")
-	section.Size = UDim2.new(1, -10, 0, 20)
-	section.Position = UDim2.new(0, 5, 0, y)
-	section.BackgroundColor3 = neonPurple
-	section.BackgroundTransparency = 0.7
-	section.BorderSizePixel = 0
-	section.Parent = tabPages[pageNum]
-	Instance.new("UICorner", section).CornerRadius = UDim.new(0, 3)
-	
-	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.new(1, 0, 1, 0)
-	lbl.Text = text
-	lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-	lbl.BackgroundTransparency = 1
-	lbl.Font = Enum.Font.GothamBold
-	lbl.TextSize = 10
-	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	lbl.Position = UDim2.new(0, 8, 0, 0)
-	lbl.Parent = section
-	
-	yOffsets[pageNum] = yOffsets[pageNum] + 10
-	return y
+local function getHumanoid()
+    local c = getCharacter()
+    return c and c:FindFirstChildOfClass("Humanoid")
 end
 
-local function addToggle(pageNum, text, y, default, callback)
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(1, -10, 0, 24)
-	btn.Position = UDim2.new(0, 5, 0, y)
-	btn.Text = "  " .. (default and "✅" or "❌") .. "  " .. text
-	btn.BackgroundColor3 = default and Color3.fromRGB(20, 40, 20) or Color3.fromRGB(40, 15, 15)
-	btn.TextColor3 = default and neonGreen or neonRed
-	btn.Font = Enum.Font.GothamBold
-	btn.TextSize = 10
-	btn.TextXAlignment = Enum.TextXAlignment.Left
-	btn.BorderSizePixel = 0
-	btn.Parent = tabPages[pageNum]
-	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
-	
-	local state = default
-	btn.MouseButton1Click:Connect(function()
-		state = not state
-		btn.Text = "  " .. (state and "✅" or "❌") .. "  " .. text
-		btn.BackgroundColor3 = state and Color3.fromRGB(20, 40, 20) or Color3.fromRGB(40, 15, 15)
-		btn.TextColor3 = state and neonGreen or neonRed
-		if callback then callback(state) end
-	end)
-	return function() return state end
+local function getNearestPlayer(maxRange)
+    local hrp = getHRP()
+    if not hrp then return nil, nil end
+    local best, bestDist, bestChar = nil, maxRange, nil
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character then
+            local target = CFG.AimbotHeadlock
+                and p.Character:FindFirstChild("Head")
+                or p.Character:FindFirstChild("HumanoidRootPart")
+            local hum = p.Character:FindFirstChildOfClass("Humanoid")
+            if target and hum and hum.Health > 0 then
+                local dist = (hrp.Position - target.Position).Magnitude
+                if dist < bestDist then
+                    best = target
+                    bestDist = dist
+                    bestChar = p.Character
+                end
+            end
+        end
+    end
+    return best, bestChar
 end
 
-local function addSlider(pageNum, text, min, max, step, default, y, callback)
-	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.new(1, -10, 0, 14)
-	lbl.Position = UDim2.new(0, 5, 0, y)
-	lbl.Text = text .. ": " .. default
-	lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
-	lbl.BackgroundTransparency = 1
-	lbl.Font = Enum.Font.Gotham
-	lbl.TextSize = 9
-	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	lbl.Parent = tabPages[pageNum]
-	
-	local bg = Instance.new("TextButton")
-	bg.Size = UDim2.new(1, -10, 0, 5)
-	bg.Position = UDim2.new(0, 5, 0, y + 15)
-	bg.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-	bg.BorderSizePixel = 0
-	bg.Text = ""
-	bg.Parent = tabPages[pageNum]
-	Instance.new("UICorner", bg).CornerRadius = UDim.new(0, 2)
-	
-	local fill = Instance.new("Frame")
-	fill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
-	fill.BackgroundColor3 = neonPurple
-	fill.BorderSizePixel = 0
-	fill.Parent = bg
-	
-	local value = default
-	bg.MouseButton1Click:Connect(function()
-		value = value + step
-		if value > max then value = min end
-		lbl.Text = text .. ": " .. value
-		fill.Size = UDim2.new((value - min) / (max - min), 0, 1, 0)
-		if callback then callback(value) end
-	end)
-	
-	return function() return value end
+-- Damage a character using their humanoid (works server-side via RemoteEvent
+-- if you have one; for now fires a BindableEvent or just tags humanoid)
+local function dealDamage(targetChar, amount)
+    local hum = targetChar:FindFirstChildOfClass("Humanoid")
+    if hum and hum.Health > 0 then
+        -- In a real game you'd fire a server RemoteEvent here.
+        -- For testing in Studio with a server script listening:
+        local remote = Workspace:FindFirstChild("DamageRemote")
+            or game.ReplicatedStorage:FindFirstChild("DamageRemote")
+        if remote and remote:IsA("RemoteEvent") then
+            remote:FireServer(targetChar, amount)
+        else
+            -- Studio fallback: direct (only works in solo/Studio)
+            hum:TakeDamage(amount)
+        end
+    end
 end
 
-local function addButton(pageNum, text, y, color, callback)
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(1, -10, 0, 24)
-	btn.Position = UDim2.new(0, 5, 0, y)
-	btn.Text = text
-	btn.BackgroundColor3 = color or neonPurple
-	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	btn.Font = Enum.Font.GothamBold
-	btn.TextSize = 10
-	btn.BorderSizePixel = 0
-	btn.Parent = tabPages[pageNum]
-	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
-	
-	btn.MouseButton1Click:Connect(callback or function() end)
-	return btn
+-- ============================================================
+--  AIMBOT  (weapon-agnostic — works with any equipped Tool)
+-- ============================================================
+local function updateAimbot()
+    if not CFG.AimbotEnabled then return end
+    local target, _ = getNearestPlayer(CFG.AimbotFOV)
+    if not target then return end
+
+    -- Smoothly rotate camera toward target
+    local targetPos  = target.Position
+    local camCF      = Camera.CFrame
+    local lookAt     = CFrame.lookAt(camCF.Position, targetPos)
+    Camera.CFrame    = camCF:Lerp(lookAt, CFG.AimbotSmoothing)
 end
 
-local function addKeybind(pageNum, text, y, defaultKey, callback)
-	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.new(0.5, -5, 0, 20)
-	lbl.Position = UDim2.new(0, 5, 0, y)
-	lbl.Text = text
-	lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
-	lbl.BackgroundTransparency = 1
-	lbl.Font = Enum.Font.Gotham
-	lbl.TextSize = 9
-	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	lbl.Parent = tabPages[pageNum]
-	
-	local bindBtn = Instance.new("TextButton")
-	bindBtn.Size = UDim2.new(0.5, -5, 0, 20)
-	bindBtn.Position = UDim2.new(0.5, 5, 0, y)
-	bindBtn.Text = defaultKey or "[ NONE ]"
-	bindBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-	bindBtn.TextColor3 = neonCyan
-	bindBtn.Font = Enum.Font.GothamBold
-	bindBtn.TextSize = 9
-	bindBtn.BorderSizePixel = 0
-	bindBtn.Parent = tabPages[pageNum]
-	Instance.new("UICorner", bindBtn).CornerRadius = UDim.new(0, 3)
-	
-	local currentKey = defaultKey
-	local listening = false
-	
-	bindBtn.MouseButton1Click:Connect(function()
-		listening = true
-		bindBtn.Text = "[ ... ]"
-		bindBtn.TextColor3 = neonYellow
-	end)
-	
-	UserInputService.InputBegan:Connect(function(input, gameProcessed)
-		if listening and input.KeyCode ~= Enum.KeyCode.Unknown then
-			currentKey = input.KeyCode.Name
-			bindBtn.Text = "[" .. currentKey .. "]"
-			bindBtn.TextColor3 = neonCyan
-			listening = false
-			if callback then callback(currentKey) end
-		end
-	end)
-	
-	return function() return currentKey end
+-- Auto-swing: if player has any Tool equipped and aimbot target is in range,
+-- simulate an activation (works for any sword/tool with a melee hit server-side)
+local function aimbotAutoSwing()
+    if not CFG.AimbotEnabled then return end
+    local char = getCharacter()
+    if not char then return end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if not tool then return end
+    local target, targetChar = getNearestPlayer(15) -- swing range
+    if not target or not targetChar then return end
+    -- Fire the tool's remote (most sword scripts use "SwordRemote" or "HitRemote")
+    local remote = tool:FindFirstChildOfClass("RemoteEvent")
+        or tool:FindFirstChild("HitEvent")
+        or tool:FindFirstChild("SwordRemote")
+    if remote then
+        remote:FireServer(targetChar)
+    else
+        -- Fallback: direct damage
+        dealDamage(targetChar, 15)
+    end
 end
 
--- ============= STATE VARIABLES =============
--- Kill Aura
-local kaEnabled = true
-local kaRange = 15
-local kaDamage = 25
-local kaThroughWalls = false
-
--- Silent Aim
-local saEnabled = true
-local saHitParts = {"Head", "HumanoidRootPart", "Torso", "UpperTorso", "LowerTorso"}
-local saHitIndex = 1
-local saFOV = 120
-local saWallCheck = true
-
--- Triggerbot
-local tbEnabled = false
-local tbDelay = 0.1
-
--- Spinbot
-local sbEnabled = false
-local sbSpeed = 10
-
--- Speed Hack
-local shEnabled = false
-local shSpeed = 50
-local shOriginalSpeed = 16
-
--- Fly
-local flyEnabled = false
-local flySpeed = 50
-local flyAlignPos, flyAlignOri, flyAttach0, flyAttach1 = nil, nil, nil, nil
-
--- Infinite Jump
-local infJumpEnabled = false
-
--- God Mode
-local godEnabled = false
-
--- ESP
-local espEnabled = true
-local espBoxes = true
-local espNames = true
-local espTracers = false
-local espHealth = true
-local espDistance = 1000
-
--- FOV Changer
-local fovEnabled = false
-local fovValue = 90
-local originalFOV = 70
-
--- Chat Spammer
-local spamEnabled = false
-local spamMessages = {"?", "lol", "nice cheat", "imagine dying", "skill issue", "💀", "L + ratio", "cope", "cheat simulator > life", "stay mad"}
-local spamIndex = 1
-
--- Fake Lag
-local lagEnabled = false
-local lagAmount = 0.2
-
--- Streamer Mode
-local streamerMode = false
-
--- ============= NEW FEATURES STATE =============
--- 1. Teleport
-local teleportEnabled = false
-local teleportTarget = nil
-
--- 2. Anti-Aim (makes enemies miss)
-local antiAimEnabled = false
-local antiAimAngle = 0
-
--- 3. Rapid Fire
-local rapidFireEnabled = false
-local rapidFireRate = 0.05
-
--- 4. Aimbot FOV Circle (visual FOV indicator)
-local fovCircleEnabled = false
-
--- 5. Auto Respawn
-local autoRespawnEnabled = false
-
--- 6. NoClip
-local noclipEnabled = false
-
--- 7. Reach (extended hit distance)
-local reachEnabled = false
-local reachDistance = 20
-
--- 8. Anti-Kick (fake)
-local antiKickEnabled = false
-
--- 9. ESP Chams (see through walls material)
-local chamsEnabled = false
-
--- 10. Server Hop
-local serverHopEnabled = false
-
--- Keybinds
-local keybinds = {}
-
--- Report Count
-local reportCount = 0
-
--- ============= TAB 1: COMBAT =============
-addSection(1, "⚔️ KILL AURA")
-addToggle(1, "Kill Aura", getY(1), true, function(s) kaEnabled = s end)
-addSlider(1, "Range", 5, 100, 5, 15, getY(1), function(v) kaRange = v end)
-addSlider(1, "Damage", 5, 500, 5, 25, getY(1), function(v) kaDamage = v end)
-addToggle(1, "Through Walls", getY(1), false, function(s) kaThroughWalls = s end)
-addKeybind(1, "KA Key", getY(1), "K", function(key) keybinds["KillAura"] = key end)
-
-addSection(1, "🎯 TRIGGERBOT")
-addToggle(1, "Triggerbot", getY(1), false, function(s) tbEnabled = s end)
-addSlider(1, "Delay (ms)", 0, 500, 25, 100, getY(1), function(v) tbDelay = v / 1000 end)
-
-addSection(1, "🔫 RAPID FIRE")
-addToggle(1, "Rapid Fire", getY(1), false, function(s) rapidFireEnabled = s end)
-addSlider(1, "Fire Rate (s)", 0.01, 0.5, 0.01, 0.05, getY(1), function(v) rapidFireRate = v end)
-
-addSection(1, "📏 REACH")
-addToggle(1, "Reach Hack", getY(1), false, function(s) reachEnabled = s end)
-addSlider(1, "Reach Distance", 15, 500, 5, 20, getY(1), function(v) reachDistance = v end)
-
-addSection(1, "💀 GOD MODE")
-addToggle(1, "God Mode", getY(1), false, function(s) godEnabled = s end)
-
-addSection(1, "🔄 AUTO RESPAWN")
-addToggle(1, "Auto Respawn", getY(1), false, function(s) autoRespawnEnabled = s end)
-
--- ============= TAB 2: RAGE =============
-addSection(2, "🔫 SILENT AIM")
-addToggle(2, "Silent Aim", getY(2), true, function(s) saEnabled = s end)
-
-local saHitPartLabel = Instance.new("TextLabel")
-saHitPartLabel.Size = UDim2.new(1, -10, 0, 14)
-saHitPartLabel.Position = UDim2.new(0, 5, 0, getY(2))
-saHitPartLabel.Text = "Hit Part: Head"
-saHitPartLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-saHitPartLabel.BackgroundTransparency = 1
-saHitPartLabel.Font = Enum.Font.Gotham
-saHitPartLabel.TextSize = 10
-saHitPartLabel.TextXAlignment = Enum.TextXAlignment.Left
-saHitPartLabel.Parent = tabPages[2]
-
-addButton(2, "Cycle Hit Part ▶", getY(2), neonCyan, function()
-	saHitIndex = saHitIndex + 1
-	if saHitIndex > #saHitParts then saHitIndex = 1 end
-	saHitPartLabel.Text = "Hit Part: " .. saHitParts[saHitIndex]
-end)
-addSlider(2, "FOV", 30, 360, 10, 120, getY(2), function(v) saFOV = v end)
-addToggle(2, "Wall Check", getY(2), true, function(s) saWallCheck = s end)
-
-addSection(2, "🌀 SPINBOT")
-addToggle(2, "Spinbot", getY(2), false, function(s) sbEnabled = s end)
-addSlider(2, "Spin Speed", 1, 50, 1, 10, getY(2), function(v) sbSpeed = v end)
-
-addSection(2, "🛡️ ANTI-AIM")
-addToggle(2, "Anti-Aim", getY(2), false, function(s) antiAimEnabled = s end)
-
-addSection(2, "🚫 ANTI-KICK (FAKE)")
-addToggle(2, "Anti-Kick", getY(2), false, function(s) antiKickEnabled = s end)
-
-addSection(2, "🌐 SERVER HOP")
-addToggle(2, "Server Hop", getY(2), false, function(s)
-	serverHopEnabled = s
-	if s then
-		StarterGui:SetCore("SendNotification", {
-			Title = "🌐 Server Hop",
-			Text = "Searching for new server...",
-			Duration = 2,
-		})
-		task.wait(2)
-		pcall(function()
-			TeleportService:Teleport(game.PlaceId, player)
-		end)
-	end
-end)
-
--- ============= TAB 3: VISUALS =============
-addSection(3, "👁️ ESP")
-addToggle(3, "ESP Master", getY(3), true, function(s) espEnabled = s end)
-addToggle(3, "Boxes", getY(3), true, function(s) espBoxes = s end)
-addToggle(3, "Names", getY(3), true, function(s) espNames = s end)
-addToggle(3, "Tracers", getY(3), false, function(s) espTracers = s end)
-addToggle(3, "Health Bars", getY(3), true, function(s) espHealth = s end)
-addSlider(3, "Max Distance", 100, 5000, 100, 1000, getY(3), function(v) espDistance = v end)
-
-addSection(3, "👻 CHAMS (WALLHACK)")
-addToggle(3, "Chams", getY(3), false, function(s) chamsEnabled = s end)
-
-addSection(3, "📷 FOV CHANGER")
-addToggle(3, "FOV Changer", getY(3), false, function(s)
-	fovEnabled = s
-	camera.FieldOfView = s and fovValue or originalFOV
-end)
-addSlider(3, "FOV Value", 30, 180, 5, 90, getY(3), function(v)
-	fovValue = v
-	if fovEnabled then camera.FieldOfView = v end
-end)
-
-addSection(3, "🎯 AIMBOT FOV CIRCLE")
-addToggle(3, "FOV Circle", getY(3), false, function(s) fovCircleEnabled = s end)
-
-addSection(3, "🌈 NEON MENU")
-addToggle(3, "Rainbow Mode", getY(3), true, function(s) rainbowEnabled = s end)
-
-addSection(3, "📺 STREAMER MODE")
-addToggle(3, "Streamer Mode", getY(3), false, function(s)
-	streamerMode = s
-	screenGui.Enabled = not s
-end)
-
--- ============= TAB 4: MOVEMENT =============
-addSection(4, "⚡ SPEED HACK")
-addToggle(4, "Speed Hack", getY(4), false, function(s)
-	shEnabled = s
-	local char = player.Character
-	if char then
-		local hum = char:FindFirstChild("Humanoid")
-		if hum then
-			if s then shOriginalSpeed = hum.WalkSpeed; hum.WalkSpeed = shSpeed
-			else hum.WalkSpeed = shOriginalSpeed end
-		end
-	end
-end)
-addSlider(4, "Speed", 20, 200, 5, 50, getY(4), function(v)
-	shSpeed = v
-	if shEnabled and player.Character then
-		local hum = player.Character:FindFirstChild("Humanoid")
-		if hum then hum.WalkSpeed = v end
-	end
-end)
-
-addSection(4, "🕊️ FLY")
-addToggle(4, "Fly", getY(4), false, function(s)
-	flyEnabled = s
-	if s then enableFly() else disableFly() end
-end)
-addSlider(4, "Fly Speed", 10, 200, 10, 50, getY(4), function(v) flySpeed = v end)
-
-addSection(4, "🐇 INFINITE JUMP")
-addToggle(4, "Infinite Jump", getY(4), false, function(s) infJumpEnabled = s end)
-
-addSection(4, "🚀 NOCLIP")
-addToggle(4, "NoClip", getY(4), false, function(s)
-	noclipEnabled = s
-	if player.Character then
-		local hum = player.Character:FindFirstChild("Humanoid")
-		if hum then hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, not s) end
-		for _, part in ipairs(player.Character:GetDescendants()) do
-			if part:IsA("BasePart") then
-				part.CanCollide = not s
-			end
-		end
-	end
-end)
-
-addSection(4, "📍 TELEPORT")
-addToggle(4, "Click Teleport", getY(4), false, function(s) teleportEnabled = s end)
-
--- ============= TAB 5: TROLL =============
-addSection(5, "💬 CHAT SPAMMER")
-addToggle(5, "Chat Spammer", getY(5), false, function(s) spamEnabled = s end)
-addButton(5, "Add Custom Message", getY(5), neonOrange, function()
-	table.insert(spamMessages, "custom spam " .. #spamMessages)
-end)
-
-addSection(5, "🎵 SOUND SPAM")
-local soundSpamEnabled = false
-local spamSoundId = "rbxassetid://9120386436" -- Default annoying sound
-addToggle(5, "Sound Spam", getY(5), false, function(s)
-	soundSpamEnabled = s
-	if not s then
-		for _, v in ipairs(Workspace:GetDescendants()) do
-			if v:IsA("Sound") and v.Name == "SpamSound" then v:Destroy() end
-		end
-	end
-end)
-
-addSection(5, "💥 EXPLODE ALL")
-addButton(5, "Explode Everyone", getY(5), neonRed, function()
-	for _, target in ipairs(Players:GetPlayers()) do
-		if target == player then continue end
-		local char = target.Character
-		if char then
-			local root = char:FindFirstChild("HumanoidRootPart")
-			if root then
-				local explosion = Instance.new("Explosion")
-				explosion.Position = root.Position
-				explosion.BlastRadius = 15
-				explosion.BlastPressure = 500000
-				explosion.DestroyJointRadiusPercent = 0
-				explosion.Parent = Workspace
-			end
-		end
-	end
-	StarterGui:SetCore("SendNotification", {
-		Title = "💥 EXPLOSION",
-		Text = "Everyone exploded. Oops.",
-		Duration = 3,
-	})
-end)
-
-addSection(5, "🥶 FREEZE ALL")
-addButton(5, "Freeze Everyone", getY(5), neonCyan, function()
-	for _, target in ipairs(Players:GetPlayers()) do
-		if target == player then continue end
-		local char = target.Character
-		if char then
-			local root = char:FindFirstChild("HumanoidRootPart")
-			if root then
-				root.Anchored = true
-				task.wait(3)
-				root.Anchored = false
-			end
-		end
-	end
-	StarterGui:SetCore("SendNotification", {
-		Title = "🥶 FREEZE",
-		Text = "Everyone frozen for 3 seconds!",
-		Duration = 3,
-	})
-end)
-
-addSection(5, "🔥 FLING ALL")
-addButton(5, "Fling Everyone", getY(5), neonOrange, function()
-	for _, target in ipairs(Players:GetPlayers()) do
-		if target == player then continue end
-		local char = target.Character
-		if char then
-			local root = char:FindFirstChild("HumanoidRootPart")
-			if root then
-				local bv = Instance.new("BodyVelocity")
-				bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-				bv.Velocity = Vector3.new(math.random(-500, 500), math.random(200, 500), math.random(-500, 500))
-				bv.Parent = root
-				game:GetService("Debris"):AddItem(bv, 0.5)
-			end
-		end
-	end
-	StarterGui:SetCore("SendNotification", {
-		Title = "🔥 FLING",
-		Text = "YEET! Everyone go fly!",
-		Duration = 3,
-	})
-end)
-
-addSection(5, "👕 STEAL CLOTHING")
-addButton(5, "Steal Everyone's Clothes", getY(5), neonPink, function()
-	for _, target in ipairs(Players:GetPlayers()) do
-		if target == player then continue end
-		local char = target.Character
-		if char then
-			for _, v in ipairs(char:GetChildren()) do
-				if v:IsA("Clothing") or v:IsA("Accessory") then
-					v:Destroy()
-				end
-			end
-		end
-	end
-	StarterGui:SetCore("SendNotification", {
-		Title = "👕 STOLEN",
-		Text = "Everyone's clothes are gone. Naked server!",
-		Duration = 3,
-	})
-end)
-
-addSection(5, "🪑 SIT ALL")
-addButton(5, "Force Sit Everyone", getY(5), neonYellow, function()
-	for _, target in ipairs(Players:GetPlayers()) do
-		if target == player then continue end
-		local char = target.Character
-		if char then
-			local hum = char:FindFirstChild("Humanoid")
-			if hum then hum.Sit = true end
-		end
-	end
-	StarterGui:SetCore("SendNotification", {
-		Title = "🪑 SIT DOWN",
-		Text = "Everyone take a seat!",
-		Duration = 3,
-	})
-end)
-
-addSection(5, "😱 JUMPSCARE ALL")
-addButton(5, "Jumpscare Everyone", getY(5), neonRed, function()
-	local sound = Instance.new("Sound")
-	sound.SoundId = "rbxassetid://4608675390"
-	sound.Volume = 10
-	sound.Parent = Workspace
-	sound:Play()
-	game:GetService("Debris"):AddItem(sound, 3)
-	
-	for _, target in ipairs(Players:GetPlayers()) do
-		if target == player then continue end
-		StarterGui:SetCore("SendNotification", {
-			Title = "👻 BOO!",
-			Text = target.Name .. " got jumpscared!",
-			Duration = 2,
-		})
-	end
-end)
-
--- ============= TAB 6: MEMES =============
-addSection(6, "📊 REPORT COUNTER")
-local reportLabel = Instance.new("TextLabel")
-reportLabel.Size = UDim2.new(1, -10, 0, 20)
-reportLabel.Position = UDim2.new(0, 5, 0, getY(6))
-reportLabel.Text = "Reports: 0"
-reportLabel.TextColor3 = neonYellow
-reportLabel.BackgroundTransparency = 1
-reportLabel.Font = Enum.Font.GothamBold
-reportLabel.TextSize = 11
-reportLabel.Parent = tabPages[6]
-
-addButton(6, "Simulate Report 💀", getY(6), neonRed, function()
-	reportCount = reportCount + 1
-	reportLabel.Text = "Reports: " .. reportCount .. " — IMAGINE REPORTING LMAO"
-	StarterGui:SetCore("SendNotification", {
-		Title = "⚠️ Player Reported You",
-		Text = "Someone reported you for cheating! ...in Cheat Simulator. Bruh.",
-		Duration = 3,
-	})
-end)
-
-addSection(6, "❌ FAKE CRASH")
-addButton(6, "Crash Server (Fake)", getY(6), neonRed, function()
-	StarterGui:SetCore("SendNotification", {
-		Title = "💥 CRASHING SERVER...",
-		Text = "3... 2... 1... just kidding lol",
-		Duration = 4,
-	})
-end)
-
-addSection(6, "🔓 UNBAN ME")
-addButton(6, "Unban Me", getY(6), neonGreen, function()
-	StarterGui:SetCore("SendNotification", {
-		Title = "🔓 UNBAN REQUEST",
-		Text = "lol no. you're banned forever.",
-		Duration = 3,
-	})
-end)
-
-addSection(6, "🏆 TOGGLE SKILL")
-addButton(6, "Toggle Skill", getY(6), neonYellow, function()
-	kaEnabled = false; saEnabled = false; sbEnabled = false
-	shEnabled = false; flyEnabled = false; godEnabled = false
-	infJumpEnabled = false; espEnabled = false; tbEnabled = false
-	fovEnabled = false; noclipEnabled = false; antiAimEnabled = false
-	rapidFireEnabled = false; reachEnabled = false; chamsEnabled = false
-	
-	if flyEnabled then disableFly() end
-	if player.Character then
-		local hum = player.Character:FindFirstChild("Humanoid")
-		if hum then hum.Health = 0 end
-	end
-	
-	StarterGui:SetCore("SendNotification", {
-		Title = "💀 SKILL ACTIVATED",
-		Text = "All cheats disabled. You died. Pure skill issue.",
-		Duration = 4,
-	})
-end)
-
-addSection(6, "😈 FAKE LAG")
-addToggle(6, "Fake Lag", getY(6), false, function(s) lagEnabled = s end)
-addSlider(6, "Lag Amount (s)", 0.05, 2, 0.05, 0.2, getY(6), function(v) lagAmount = v end)
-
-addSection(6, "📋 COPY CONFIG")
-addButton(6, "Copy Config to Clipboard", getY(6), neonGreen, function()
-	local config = {
-		kaEnabled = kaEnabled, kaRange = kaRange, kaDamage = kaDamage,
-		saEnabled = saEnabled, saHitIndex = saHitIndex, saFOV = saFOV,
-		sbEnabled = sbEnabled, sbSpeed = sbSpeed,
-		shEnabled = shEnabled, shSpeed = shSpeed,
-		espEnabled = espEnabled, espBoxes = espBoxes, espNames = espNames,
-		tbEnabled = tbEnabled, godEnabled = godEnabled,
-		fovEnabled = fovEnabled, fovValue = fovValue,
-		noclipEnabled = noclipEnabled, reachEnabled = reachEnabled,
-		antiAimEnabled = antiAimEnabled, chamsEnabled = chamsEnabled,
-		rapidFireEnabled = rapidFireEnabled
-	}
-	local json = HttpService:JSONEncode(config)
-	if setclipboard then
-		setclipboard(json)
-		StarterGui:SetCore("SendNotification", {
-			Title = "📋 COPIED",
-			Text = "Config copied to clipboard!",
-			Duration = 2,
-		})
-	end
-end)
-
--- ============= TAB 7: CONFIG =============
-addSection(7, "💾 PRESETS")
-addButton(7, "Rage Preset (All ON)", getY(7), neonRed, function()
-	kaEnabled = true; saEnabled = true; sbEnabled = true
-	shEnabled = true; espEnabled = true; tbEnabled = true
-	godEnabled = true; kaThroughWalls = true; saWallCheck = false
-	kaRange = 100; kaDamage = 500; sbSpeed = 30; shSpeed = 200
-	noclipEnabled = true; antiAimEnabled = true; rapidFireEnabled = true
-	reachEnabled = true; chamsEnabled = true; flyEnabled = true
-	
-	if not flyEnabled then flyEnabled = true; enableFly() end
-	if player.Character then
-		local hum = player.Character:FindFirstChild("Humanoid")
-		if hum then hum.WalkSpeed = 200 end
-		for _, part in ipairs(player.Character:GetDescendants()) do
-			if part:IsA("BasePart") then part.CanCollide = false end
-		end
-	end
-	
-	StarterGui:SetCore("SendNotification", {
-		Title = "😈 RAGE MODE",
-		Text = "Maximum degeneracy. No mercy.",
-		Duration = 3,
-	})
-end)
-
-addButton(7, "Closet Preset (Subtle)", getY(7), neonCyan, function()
-	kaEnabled = true; saEnabled = true; sbEnabled = false
-	shEnabled = false; espEnabled = true; tbEnabled = false
-	godEnabled = false; kaThroughWalls = false; saWallCheck = true
-	kaRange = 10; kaDamage = 5; saFOV = 30
-	noclipEnabled = false; antiAimEnabled = false; rapidFireEnabled = false
-	reachEnabled = false; chamsEnabled = false; flyEnabled = false
-	
-	disableFly()
-	
-	StarterGui:SetCore("SendNotification", {
-		Title = "🤫 CLOSET MODE",
-		Text = "Subtle cheating. They'll never know... probably.",
-		Duration = 3,
-	})
-end)
-
-addButton(7, "Troll Preset", getY(7), neonOrange, function()
-	spamEnabled = true; soundSpamEnabled = true; teleportEnabled = true
-	lagEnabled = true; antiAimEnabled = true; sbEnabled = true
-	sbSpeed = 50
-	
-	StarterGui:SetCore("SendNotification", {
-		Title = "🧌 TROLL MODE",
-		Text = "Maximum annoyance activated!",
-		Duration = 3,
-	})
-end)
-
-addButton(7, "Reset All", getY(7), neonRed, function()
-	kaEnabled = false; saEnabled = false; sbEnabled = false
-	shEnabled = false; espEnabled = false; tbEnabled = false
-	godEnabled = false; flyEnabled = false; infJumpEnabled = false
-	fovEnabled = false; spamEnabled = false; lagEnabled = false
-	noclipEnabled = false; antiAimEnabled = false; rapidFireEnabled = false
-	reachEnabled = false; chamsEnabled = false; teleportEnabled = false
-	
-	disableFly()
-	if player.Character then
-		local hum = player.Character:FindFirstChild("Humanoid")
-		if hum then hum.WalkSpeed = 16 end
-		for _, part in ipairs(player.Character:GetDescendants()) do
-			if part:IsA("BasePart") then part.CanCollide = true end
-		end
-	end
-	camera.FieldOfView = originalFOV
-	
-	StarterGui:SetCore("SendNotification", {
-		Title = "🔄 RESET",
-		Text = "All cheats disabled. Playing legit... like a chump.",
-		Duration = 3,
-	})
-end)
-
-addKeybind(7, "Menu Toggle", getY(7), "RightShift", function(key) keybinds["MenuToggle"] = key end)
-
--- ============= CORE LOGIC =============
-
--- Wall Check Utility
-local function isWallBetween(pos1, pos2, ignoreList)
-	local rayParams = RaycastParams.new()
-	rayParams.FilterDescendantsInstances = ignoreList or {player.Character}
-	rayParams.FilterType = Enum.RaycastFilterType.Blacklist
-	local rayResult = Workspace:Raycast(pos1, (pos2 - pos1).Unit * (pos2 - pos1).Magnitude, rayParams)
-	return rayResult ~= nil
+-- ============================================================
+--  KILL AURA
+-- ============================================================
+local function updateKillAura(dt)
+    if not CFG.KillAuraEnabled then return end
+    _killAuraTimer = _killAuraTimer + dt
+    if _killAuraTimer < CFG.KillAuraRate then return end
+    _killAuraTimer = 0
+    local hrp = getHRP()
+    if not hrp then return end
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character then
+            local otherHRP = p.Character:FindFirstChild("HumanoidRootPart")
+            local hum      = p.Character:FindFirstChildOfClass("Humanoid")
+            if otherHRP and hum and hum.Health > 0 then
+                local dist = (hrp.Position - otherHRP.Position).Magnitude
+                if dist <= CFG.KillAuraRange then
+                    dealDamage(p.Character, CFG.KillAuraDamage)
+                end
+            end
+        end
+    end
 end
 
--- FLY SYSTEM (FIXED)
-function enableFly()
-	local char = player.Character
-	if not char then return end
-	local root = char:FindFirstChild("HumanoidRootPart")
-	local hum = char:FindFirstChild("Humanoid")
-	if not root or not hum then return end
-	
-	hum.PlatformStand = true
-	
-	flyAttach0 = Instance.new("Attachment")
-	flyAttach0.Parent = root
-	flyAttach1 = Instance.new("Attachment")
-	flyAttach1.Parent = root
-	
-	flyAlignPos = Instance.new("AlignPosition")
-	flyAlignPos.Attachment0 = flyAttach0
-	flyAlignPos.MaxForce = 1000000
-	flyAlignPos.MaxVelocity = 1000000
-	flyAlignPos.Responsiveness = 200
-	flyAlignPos.RigidityEnabled = false
-	flyAlignPos.Parent = root
-	
-	flyAlignOri = Instance.new("AlignOrientation")
-	flyAlignOri.Attachment0 = flyAttach1
-	flyAlignOri.MaxTorque = 1000000
-	flyAlignOri.MaxAngularVelocity = 1000000
-	flyAlignOri.Responsiveness = 200
-	flyAlignOri.RigidityEnabled = false
-	flyAlignOri.Parent = root
-	
-	spawn(flyLoop)
+-- ============================================================
+--  ANTI-VOID SCAFFOLD
+-- ============================================================
+local function updateScaffold(dt)
+    if not CFG.ScaffoldEnabled then return end
+    _scaffoldCooldown = math.max(0, _scaffoldCooldown - dt)
+    if _scaffoldCooldown > 0 then return end
+    local hrp = getHRP()
+    if not hrp then return end
+    local pos = hrp.Position
+    -- Only activate if below threshold Y and falling
+    local vel = hrp.AssemblyLinearVelocity
+    if pos.Y > CFG.ScaffoldTriggerY or vel.Y >= -5 then return end
+    _scaffoldCooldown = 0.35
+
+    -- Raycast down to check there's no floor already close
+    local rayResult = Workspace:Raycast(
+        pos,
+        Vector3.new(0, -6, 0),
+        RaycastParams.new()
+    )
+    if rayResult then return end -- floor already there
+
+    -- Place scaffold block
+    local block = Instance.new("Part")
+    block.Size          = Vector3.new(8, 1, 8)
+    block.Position      = Vector3.new(pos.X, pos.Y - 3, pos.Z)
+    block.Anchored      = true
+    block.BrickColor    = CFG.ScaffoldColor
+    block.Material      = CFG.ScaffoldMaterial
+    block.Name          = "ScaffoldBlock"
+    block.CanCollide    = true
+    block.Parent        = Workspace
+
+    -- Fade and remove after lifetime
+    local lifetime = CFG.ScaffoldLifetime
+    task.delay(lifetime - 1, function()
+        if block and block.Parent then
+            TweenService:Create(block, TweenInfo.new(1), {Transparency = 1}):Play()
+        end
+    end)
+    task.delay(lifetime, function()
+        if block and block.Parent then block:Destroy() end
+    end)
 end
 
-function disableFly()
-	if flyAlignPos then flyAlignPos:Destroy(); flyAlignPos = nil end
-	if flyAlignOri then flyAlignOri:Destroy(); flyAlignOri = nil end
-	if flyAttach0 then flyAttach0:Destroy(); flyAttach0 = nil end
-	if flyAttach1 then flyAttach1:Destroy(); flyAttach1 = nil end
-	
-	if player.Character then
-		local hum = player.Character:FindFirstChild("Humanoid")
-		if hum then hum.PlatformStand = false end
-	end
+-- ============================================================
+--  SPEED HACK
+-- ============================================================
+local function updateSpeed()
+    local hum = getHumanoid()
+    if not hum then return end
+    if CFG.SpeedEnabled then
+        hum.WalkSpeed = 16 * CFG.SpeedMultiplier
+    else
+        hum.WalkSpeed = 16
+    end
 end
 
-function flyLoop()
-	while flyEnabled and flyAlignPos and flyAlignOri and task.wait() do
-		local char = player.Character
-		if not char then break end
-		local root = char:FindFirstChild("HumanoidRootPart")
-		if not root then break end
-		
-		local direction = Vector3.zero
-		if UserInputService:IsKeyDown(Enum.KeyCode.W) then direction += camera.CFrame.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.S) then direction -= camera.CFrame.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.A) then direction -= camera.CFrame.RightVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.D) then direction += camera.CFrame.RightVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then direction += Vector3.new(0, 1, 0) end
-		if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then direction -= Vector3.new(0, 1, 0) end
-		
-		flyAlignPos.Position = root.Position + direction * flySpeed * 0.15
-		flyAlignOri.CFrame = camera.CFrame
-	end
+-- ============================================================
+--  HIGH JUMP
+-- ============================================================
+local function setupHighJump()
+    UserInputService.JumpRequest:Connect(function()
+        if not CFG.HighJumpEnabled then return end
+        local hum = getHumanoid()
+        if hum then
+            hum.JumpPower = CFG.HighJumpPower
+            task.delay(0.1, function()
+                if hum then hum.JumpPower = 50 end
+            end)
+        end
+    end)
 end
 
--- Get Best Target for Silent Aim
-local function getBestSATarget()
-	local closest = nil
-	local closestAngle = saFOV
-	
-	for _, target in ipairs(Players:GetPlayers()) do
-		if target == player then continue end
-		local char = target.Character
-		if not char then continue end
-		local hum = char:FindFirstChild("Humanoid")
-		if not hum or hum.Health <= 0 then continue end
-		local targetPart = char:FindFirstChild(saHitParts[saHitIndex])
-		if not targetPart then continue end
-		
-		if saWallCheck then
-			if isWallBetween(camera.CFrame.Position, targetPart.Position, {player.Character}) then continue end
-		end
-		
-		local screenPos, onScreen = camera:WorldToViewportPoint(targetPart.Position)
-		if not onScreen then continue end
-		local mousePos = Vector2.new(mouse.X, mouse.Y)
-		local targetPos = Vector2.new(screenPos.X, screenPos.Y)
-		local dist = (mousePos - targetPos).Magnitude
-		local angle = (dist / camera.ViewportSize.X) * camera.FieldOfView
-		
-		if angle < closestAngle then
-			closestAngle = angle
-			closest = targetPart
-		end
-	end
-	return closest
+-- ============================================================
+--  INFINITE JUMP
+-- ============================================================
+local function setupInfJump()
+    UserInputService.JumpRequest:Connect(function()
+        if not CFG.InfJumpEnabled then return end
+        local hum = getHumanoid()
+        if hum then
+            hum:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end)
 end
 
--- Kill Aura
-RunService.Heartbeat:Connect(function()
-	if not kaEnabled then return end
-	local char = player.Character
-	if not char then return end
-	local hum = char:FindFirstChild("Humanoid")
-	if not hum or hum.Health <= 0 then return end
-	local root = char:FindFirstChild("HumanoidRootPart")
-	if not root then return end
-	
-	for _, target in ipairs(Players:GetPlayers()) do
-		if target == player then continue end
-		local tChar = target.Character
-		if not tChar then continue end
-		local tHum = tChar:FindFirstChild("Humanoid")
-		if not tHum or tHum.Health <= 0 then continue end
-		local tRoot = tChar:FindFirstChild("HumanoidRootPart")
-		if not tRoot then continue end
-		
-		local dist = (root.Position - tRoot.Position).Magnitude
-		if dist > kaRange then continue end
-		if not kaThroughWalls and isWallBetween(root.Position, tRoot.Position, {char, tChar}) then continue end
-		
-		tHum:TakeDamage(kaDamage)
-	end
-end)
+-- ============================================================
+--  FLY
+-- ============================================================
+local function enableFly()
+    local hrp = getHRP()
+    local hum = getHumanoid()
+    if not hrp or not hum then return end
+    hum.PlatformStand = true
 
--- Spinbot + Anti-Aim
-RunService.RenderStepped:Connect(function()
-	local char = player.Character
-	if not char then return end
-	local root = char:FindFirstChild("HumanoidRootPart")
-	if not root then return end
-	
-	if sbEnabled then
-		root.CFrame = root.CFrame * CFrame.Angles(0, math.rad(sbSpeed), 0)
-	end
-	
-	if antiAimEnabled then
-		antiAimAngle = antiAimAngle + 15
-		root.CFrame = root.CFrame * CFrame.Angles(math.rad(math.sin(antiAimAngle / 10) * 45), 0, math.rad(math.cos(antiAimAngle / 10) * 45))
-	end
-end)
+    _flyBodyVelocity = Instance.new("BodyVelocity")
+    _flyBodyVelocity.Velocity    = Vector3.zero
+    _flyBodyVelocity.MaxForce    = Vector3.new(1e5,1e5,1e5)
+    _flyBodyVelocity.Parent      = hrp
 
--- God Mode
-RunService.Heartbeat:Connect(function()
-	if not godEnabled then return end
-	local char = player.Character
-	if not char then return end
-	local hum = char:FindFirstChild("Humanoid")
-	if hum and hum.Health < hum.MaxHealth then
-		hum.Health = hum.MaxHealth
-	end
-end)
-
--- Auto Respawn
-player.CharacterAdded:Connect(function(char)
-	local hum = char:WaitForChild("Humanoid")
-	hum.Died:Connect(function()
-		if autoRespawnEnabled then
-			task.wait(0.5)
-			pcall(function()
-				player:LoadCharacter()
-			end)
-		end
-	end)
-	
-	if shEnabled then
-		hum.WalkSpeed = shSpeed
-	end
-	
-	if noclipEnabled then
-		for _, part in ipairs(char:GetDescendants()) do
-			if part:IsA("BasePart") then part.CanCollide = false end
-		end
-	end
-end)
-
--- Infinite Jump
-UserInputService.JumpRequest:Connect(function()
-	if infJumpEnabled and player.Character then
-		local hum = player.Character:FindFirstChild("Humanoid")
-		if hum then
-			hum:ChangeState(Enum.HumanoidStateType.Jumping)
-		end
-	end
-end)
-
--- Silent Aim (metatable hook)
-local oldNamecall, oldIndex
-local mt = getrawmetatable(game)
-oldNamecall = mt.__namecall
-oldIndex = mt.__index
-setreadonly(mt, false)
-
-mt.__namecall = newcclosure(function(self, ...)
-	local method = getnamecallmethod()
-	local args = {...}
-	
-	if method == "FireServer" and saEnabled then
-		local targetPart = getBestSATarget()
-		if targetPart then
-			for i, arg in ipairs(args) do
-				if typeof(arg) == "Vector3" then
-					args[i] = targetPart.Position
-					break
-				end
-			end
-			return oldNamecall(self, unpack(args))
-		end
-	end
-	
-	return oldNamecall(self, ...)
-end)
-
-setreadonly(mt, true)
-
--- Triggerbot
-local tbLastShot = 0
-RunService.RenderStepped:Connect(function()
-	if not tbEnabled then return end
-	if tick() - tbLastShot < tbDelay then return end
-	
-	local targetPart = getBestSATarget()
-	if targetPart then
-		tbLastShot = tick()
-		mouse1click()
-	end
-end)
-
-function mouse1click()
-	mouse1press(true)
-	task.wait(0.05)
-	mouse1press(false)
+    _flyBodyGyro = Instance.new("BodyGyro")
+    _flyBodyGyro.MaxTorque       = Vector3.new(1e5,1e5,1e5)
+    _flyBodyGyro.D               = 100
+    _flyBodyGyro.CFrame          = hrp.CFrame
+    _flyBodyGyro.Parent          = hrp
 end
 
-function mouse1press(down)
-	pcall(function()
-		game:GetService("VirtualInputManager"):SendMouseButtonEvent(mouse.X, mouse.Y, 0, down, game, 0)
-	end)
+local function disableFly()
+    local hum = getHumanoid()
+    if hum then hum.PlatformStand = false end
+    if _flyBodyVelocity then _flyBodyVelocity:Destroy(); _flyBodyVelocity = nil end
+    if _flyBodyGyro     then _flyBodyGyro:Destroy();     _flyBodyGyro     = nil end
 end
 
--- Rapid Fire
-RunService.RenderStepped:Connect(function()
-	if not rapidFireEnabled then return end
-	if not UserInputService:IsMouseButtonPressed(0) then return end
-	
-	task.wait(rapidFireRate)
-	mouse1click()
-end)
+local function updateFly()
+    if not CFG.FlyEnabled then
+        if _flyBodyVelocity then disableFly() end
+        return
+    end
+    if not _flyBodyVelocity then enableFly() end
+    local hrp = getHRP()
+    if not hrp or not _flyBodyVelocity then return end
 
--- Teleport
-mouse.Button1Down:Connect(function()
-	if not teleportEnabled then return end
-	if not player.Character then return end
-	local root = player.Character:FindFirstChild("HumanoidRootPart")
-	if not root then return end
-	
-	local mouseHit = mouse.Hit
-	if mouseHit then
-		root.CFrame = CFrame.new(mouseHit.Position + Vector3.new(0, 3, 0))
-	end
-end)
+    local cf   = Camera.CFrame
+    local move = Vector3.zero
+    if UserInputService:IsKeyDown(Enum.KeyCode.W) then move = move + cf.LookVector end
+    if UserInputService:IsKeyDown(Enum.KeyCode.S) then move = move - cf.LookVector end
+    if UserInputService:IsKeyDown(Enum.KeyCode.A) then move = move - cf.RightVector end
+    if UserInputService:IsKeyDown(Enum.KeyCode.D) then move = move + cf.RightVector end
+    if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move = move + Vector3.new(0,1,0) end
+    if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then move = move - Vector3.new(0,1,0) end
 
--- FOV Circle
-local fovCircleDrawing = nil
-RunService.RenderStepped:Connect(function()
-	if fovCircleDrawing then fovCircleDrawing:Remove(); fovCircleDrawing = nil end
-	
-	if not fovCircleEnabled then return end
-	
-	fovCircleDrawing = Drawing.new("Circle")
-	fovCircleDrawing.Visible = true
-	fovCircleDrawing.Position = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
-	fovCircleDrawing.Radius = (saFOV / camera.FieldOfView) * (camera.ViewportSize.X / 2)
-	fovCircleDrawing.Color = neonPink
-	fovCircleDrawing.Thickness = 1.5
-	fovCircleDrawing.Filled = false
-	fovCircleDrawing.Transparency = 0.5
-end)
-
--- ESP (GUI Fallback)
-local espGuiFolder = Instance.new("Folder")
-espGuiFolder.Name = "ESPFolder"
-espGuiFolder.Parent = screenGui
-local espBillboards = {}
-
-RunService.RenderStepped:Connect(function()
-	for _, billboard in pairs(espBillboards) do
-		pcall(function() billboard:Destroy() end)
-	end
-	espBillboards = {}
-	
-	if not espEnabled then return end
-	if streamerMode then return end
-	
-	for _, target in ipairs(Players:GetPlayers()) do
-		if target == player then continue end
-		local char = target.Character
-		if not char then continue end
-		local hum = char:FindFirstChild("Humanoid")
-		if not hum or hum.Health <= 0 then continue end
-		local head = char:FindFirstChild("Head")
-		local root = char:FindFirstChild("HumanoidRootPart")
-		if not head or not root then continue end
-		
-		local headPos, onScreen = camera:WorldToViewportPoint(head.Position)
-		if not onScreen then continue end
-		
-		local dist = (camera.CFrame.Position - root.Position).Magnitude
-		if dist > espDistance then continue end
-		
-		local scale = math.clamp(200 / dist, 0.5, 2)
-		
-		if espBoxes then
-			local boxSize = Vector2.new(45 * scale, 75 * scale)
-			local boxPos = Vector2.new(headPos.X - boxSize.X/2, headPos.Y - boxSize.Y/2)
-			
-			local outline = Instance.new("Frame")
-			outline.Size = UDim2.new(0, boxSize.X, 0, boxSize.Y)
-			outline.Position = UDim2.new(0, boxPos.X, 0, boxPos.Y)
-			outline.BackgroundColor3 = neonPink
-			outline.BackgroundTransparency = 0.5
-			outline.BorderSizePixel = 0
-			outline.Parent = espGuiFolder
-			
-			local inner = Instance.new("Frame")
-			inner.Size = UDim2.new(1, -2, 1, -2)
-			inner.Position = UDim2.new(0, 1, 0, 1)
-			inner.BackgroundTransparency = 1
-			inner.BorderSizePixel = 1
-			inner.BorderColor3 = neonPink
-			inner.Parent = outline
-			
-			table.insert(espBillboards, outline)
-		end
-		
-		if espNames then
-			local nameLabel = Instance.new("TextLabel")
-			nameLabel.Size = UDim2.new(0, 100 * scale, 0, 16 * scale)
-			nameLabel.Position = UDim2.new(0, headPos.X - 50 * scale, 0, headPos.Y - 55 * scale)
-			nameLabel.Text = target.Name
-			nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-			nameLabel.BackgroundTransparency = 1
-			nameLabel.Font = Enum.Font.GothamBold
-			nameLabel.TextSize = 12 * scale
-			nameLabel.TextStrokeTransparency = 0
-			nameLabel.Parent = espGuiFolder
-			table.insert(espBillboards, nameLabel)
-		end
-		
-		if espTracers then
-			local tracer = Instance.new("Frame")
-			local startPos = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y)
-			local endPos = Vector2.new(headPos.X, headPos.Y)
-			local midPoint = (startPos + endPos) / 2
-			local length = (startPos - endPos).Magnitude
-			local angle = math.atan2(endPos.Y - startPos.Y, endPos.X - startPos.X)
-			
-			tracer.Size = UDim2.new(0, length, 0, 1)
-			tracer.Position = UDim2.new(0, midPoint.X - length/2, 0, midPoint.Y)
-			tracer.Rotation = math.deg(angle)
-			tracer.BackgroundColor3 = neonCyan
-			tracer.BorderSizePixel = 0
-			tracer.BackgroundTransparency = 0.5
-			tracer.Parent = espGuiFolder
-			table.insert(espBillboards, tracer)
-		end
-		
-		if espHealth then
-			local hp = hum.Health / hum.MaxHealth
-			local bw, bh = 4 * scale, 75 * scale
-			local bx, by = headPos.X - 27 * scale, headPos.Y - bh/2
-			
-			local bg = Instance.new("Frame")
-			bg.Size = UDim2.new(0, bw, 0, bh)
-			bg.Position = UDim2.new(0, bx, 0, by)
-			bg.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-			bg.BorderSizePixel = 0
-			bg.Parent = espGuiFolder
-			table.insert(espBillboards, bg)
-			
-			local bar = Instance.new("Frame")
-			bar.Size = UDim2.new(0, bw, hp, 0)
-			bar.Position = UDim2.new(0, 0, 1 - hp, 0)
-			bar.BackgroundColor3 = Color3.fromRGB(0, 255, 0):Lerp(Color3.fromRGB(255, 0, 0), 1 - hp)
-			bar.BorderSizePixel = 0
-			bar.Parent = bg
-		end
-	end
-end)
-
--- Chams (Highlight through walls)
-RunService.RenderStepped:Connect(function()
-	if not chamsEnabled then return end
-	
-	for _, target in ipairs(Players:GetPlayers()) do
-		if target == player then continue end
-		local char = target.Character
-		if not char then continue end
-		
-		for _, part in ipairs(char:GetDescendants()) do
-			if part:IsA("BasePart") and part.Transparency >= 0 then
-				local highlight = part:FindFirstChildOfClass("Highlight")
-				if not highlight then
-					highlight = Instance.new("Highlight")
-					highlight.FillColor = neonPink
-					highlight.OutlineColor = neonCyan
-					highlight.FillTransparency = 0.5
-					highlight.OutlineTransparency = 0
-					highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-					highlight.Parent = part
-				end
-			end
-		end
-	end
-end)
-
--- Sound Spam
-spawn(function()
-	while task.wait(1) do
-		if soundSpamEnabled then
-			for _, target in ipairs(Players:GetPlayers()) do
-				if target == player then continue end
-				local char = target.Character
-				if char and char:FindFirstChild("Head") then
-					local sound = Instance.new("Sound")
-					sound.SoundId = spamSoundId
-					sound.Volume = 3
-					sound.Parent = char.Head
-					sound:Play()
-					game:GetService("Debris"):AddItem(sound, 2)
-				end
-			end
-		end
-	end
-end)
-
--- Chat Spammer (Legacy + Modern)
-spawn(function()
-	while task.wait(2) do
-		if spamEnabled and player.Character then
-			local hum = player.Character:FindFirstChild("Humanoid")
-			if hum and hum.Health > 0 then
-				local msg = spamMessages[spamIndex]
-				spamIndex = spamIndex % #spamMessages + 1
-				
-				pcall(function()
-					ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(msg, "All")
-				end)
-				pcall(function()
-					local chatService = game:GetService("TextChatService")
-					if chatService.ChatInputBarConfiguration.TargetTextChannel then
-						chatService.ChatInputBarConfiguration.TargetTextChannel:SendAsync(msg)
-					end
-				end)
-			end
-		end
-	end
-end)
-
--- Fake Lag
-spawn(function()
-	while task.wait() do
-		if lagEnabled then
-			task.wait(lagAmount)
-		end
-	end
-end)
-
--- Anti-Kick (fake messages)
-spawn(function()
-	while task.wait(30) do
-		if antiKickEnabled then
-			StarterGui:SetCore("SendNotification", {
-				Title = "🛡️ Anti-Kick",
-				Text = "Blocked kick attempt. You're safe.",
-				Duration = 2,
-			})
-		end
-	end
-end)
-
--- Keybind Handler
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	if gameProcessed then return end
-	
-	for action, key in pairs(keybinds) do
-		if input.KeyCode == Enum.KeyCode[key] then
-			if action == "KillAura" then
-				kaEnabled = not kaEnabled
-				StarterGui:SetCore("SendNotification", {
-					Title = "⚡ Kill Aura",
-					Text = kaEnabled and "ON" or "OFF",
-					Duration = 1,
-				})
-			elseif action == "MenuToggle" then
-				mainFrame.Visible = not mainFrame.Visible
-			end
-		end
-	end
-end)
-
--- Cleanup
-local function cleanup()
-	pcall(function()
-		local mt = getrawmetatable(game)
-		setreadonly(mt, false)
-		mt.__namecall = oldNamecall
-		mt.__index = oldIndex
-		setreadonly(mt, true)
-	end)
-	
-	for _, d in pairs(espBillboards) do pcall(function() d:Destroy() end) end
-	espBillboards = {}
-	
-	disableFly()
-	
-	if player.Character then
-		local hum = player.Character:FindFirstChild("Humanoid")
-		if hum then hum.WalkSpeed = 16; hum.PlatformStand = false end
-		for _, part in ipairs(player.Character:GetDescendants()) do
-			if part:IsA("BasePart") then part.CanCollide = true end
-			local highlight = part:FindFirstChildOfClass("Highlight")
-			if highlight then highlight:Destroy() end
-		end
-	end
-	
-	for _, v in ipairs(Workspace:GetDescendants()) do
-		if v:IsA("Sound") and v.Name == "SpamSound" then v:Destroy() end
-	end
-	
-	camera.FieldOfView = originalFOV
-	
-	if fovCircleDrawing then fovCircleDrawing:Remove() end
+    _flyBodyVelocity.Velocity = move.Magnitude > 0
+        and move.Unit * CFG.FlySpeed
+        or Vector3.zero
+    _flyBodyGyro.CFrame = cf
 end
 
-closeButton.MouseButton1Click:Connect(function()
-	cleanup()
-	screenGui:Destroy()
+-- ============================================================
+--  GHOST MODE (no player collisions)
+-- ============================================================
+local function updateGhost()
+    local char = getCharacter()
+    if not char then return end
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CollisionGroup = CFG.GhostEnabled
+                and "GhostPlayers"   -- set this collision group up in game
+                or  "Default"
+        end
+    end
+end
+
+-- ============================================================
+--  AUTO COLLECT
+-- ============================================================
+local function updateAutoCollect()
+    if not CFG.AutoCollectEnabled then return end
+    local hrp = getHRP()
+    if not hrp then return end
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and obj.Name:lower():find("pickup")
+        or obj:IsA("BasePart") and obj.Name:lower():find("coin")
+        or obj:IsA("BasePart") and obj.Name:lower():find("gem") then
+            local dist = (hrp.Position - obj.Position).Magnitude
+            if dist <= CFG.AutoCollectRange then
+                obj.Position = hrp.Position
+            end
+        end
+    end
+end
+
+-- ============================================================
+--  ESP (name + health labels through walls)
+-- ============================================================
+local function updateESP()
+    -- Remove old billboards for players who left
+    for player, bb in pairs(_espBillboards) do
+        if not Players:FindFirstChild(player.Name) or not CFG.ESPEnabled then
+            bb:Destroy()
+            _espBillboards[player] = nil
+        end
+    end
+    if not CFG.ESPEnabled then return end
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character then
+            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+            local hum = p.Character:FindFirstChildOfClass("Humanoid")
+            if hrp and hum then
+                if not _espBillboards[p] then
+                    local bb = Instance.new("BillboardGui")
+                    bb.Size           = UDim2.new(0, 120, 0, 36)
+                    bb.StudsOffset    = Vector3.new(0, 3, 0)
+                    bb.AlwaysOnTop    = true
+                    bb.Adornee        = hrp
+                    bb.Parent         = PlayerGui
+                    local lbl         = Instance.new("TextLabel", bb)
+                    lbl.Size          = UDim2.new(1, 0, 1, 0)
+                    lbl.BackgroundTransparency = 1
+                    lbl.TextColor3    = Color3.fromRGB(255, 80, 80)
+                    lbl.TextStrokeTransparency = 0.4
+                    lbl.Font          = Enum.Font.GothamBold
+                    lbl.TextSize      = 13
+                    lbl.Name          = "ESPLabel"
+                    _espBillboards[p] = bb
+                end
+                local lbl = _espBillboards[p]:FindFirstChild("ESPLabel")
+                if lbl then
+                    lbl.Text = p.DisplayName .. "\n❤️ " .. math.floor(hum.Health)
+                end
+            end
+        end
+    end
+end
+
+-- ============================================================
+--  RADAR (basic — shows dots in a ScreenGui corner)
+-- ============================================================
+local _radarGui = nil
+local function buildRadar()
+    if _radarGui then _radarGui:Destroy() end
+    _radarGui = Instance.new("ScreenGui")
+    _radarGui.Name           = "CheatRadar"
+    _radarGui.ResetOnSpawn   = false
+    _radarGui.Parent         = PlayerGui
+
+    local bg = Instance.new("Frame", _radarGui)
+    bg.Name              = "RadarBG"
+    bg.Size              = UDim2.new(0, 130, 0, 130)
+    bg.Position          = UDim2.new(1, -145, 1, -145)
+    bg.BackgroundColor3  = Color3.fromRGB(10, 10, 20)
+    bg.BackgroundTransparency = 0.4
+    bg.BorderSizePixel   = 0
+    Instance.new("UICorner", bg).CornerRadius = UDim.new(1, 0)
+
+    -- Centre dot (you)
+    local self = Instance.new("Frame", bg)
+    self.Size            = UDim2.new(0, 6, 0, 6)
+    self.Position        = UDim2.new(0.5, -3, 0.5, -3)
+    self.BackgroundColor3= Color3.fromRGB(80, 255, 100)
+    self.BorderSizePixel = 0
+    Instance.new("UICorner", self).CornerRadius = UDim.new(1,0)
+end
+
+local function updateRadar()
+    if not CFG.RadarEnabled then
+        if _radarGui then _radarGui:Destroy(); _radarGui = nil end
+        return
+    end
+    if not _radarGui then buildRadar() end
+    local bg  = _radarGui:FindFirstChild("RadarBG")
+    if not bg then return end
+    local hrp = getHRP()
+    if not hrp then return end
+
+    -- Clear old dots
+    for _, d in ipairs(bg:GetChildren()) do
+        if d.Name == "RadarDot" then d:Destroy() end
+    end
+
+    local scale = 1.5 -- studs per pixel
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character then
+            local oHRP = p.Character:FindFirstChild("HumanoidRootPart")
+            if oHRP then
+                local rel = oHRP.Position - hrp.Position
+                local px  = 65 + (rel.X / scale)
+                local py  = 65 - (rel.Z / scale)
+                local dot = Instance.new("Frame", bg)
+                dot.Name             = "RadarDot"
+                dot.Size             = UDim2.new(0, 5, 0, 5)
+                dot.Position         = UDim2.new(0, px - 2, 0, py - 2)
+                dot.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+                dot.BorderSizePixel  = 0
+                Instance.new("UICorner", dot).CornerRadius = UDim.new(1,0)
+            end
+        end
+    end
+end
+
+-- ============================================================
+--  SAVE / LOAD CONFIG  (Profile stores per-session in a table;
+--  for cross-session saving wire to a DataStore server script)
+-- ============================================================
+local function saveConfig()
+    -- Saves to a BindableFunction if your server script listens,
+    -- otherwise prints the table for now
+    local data = {}
+    for k, v in pairs(CFG) do data[k] = v end
+    local bf = game.ReplicatedStorage:FindFirstChild("SaveConfig")
+    if bf and bf:IsA("BindableFunction") then
+        bf:Invoke(data)
+    end
+    -- Visual feedback
+    return data
+end
+
+local function loadConfig(data)
+    if not data then return end
+    for k, v in pairs(data) do
+        if CFG[k] ~= nil then CFG[k] = v end
+    end
+end
+
+-- ============================================================
+--  GUI  — Cheat Menu
+-- ============================================================
+local function makeCorner(parent, radius)
+    local c = Instance.new("UICorner", parent)
+    c.CornerRadius = UDim.new(0, radius or 8)
+    return c
+end
+
+local function makeLabel(parent, text, size, color, font)
+    local l = Instance.new("TextLabel", parent)
+    l.Size                     = size or UDim2.new(1,0,0,20)
+    l.BackgroundTransparency   = 1
+    l.Text                     = text
+    l.TextColor3               = color or Color3.fromRGB(220,220,220)
+    l.Font                     = font or Enum.Font.GothamBold
+    l.TextSize                 = 13
+    l.TextXAlignment           = Enum.TextXAlignment.Left
+    return l
+end
+
+local GUI = Instance.new("ScreenGui")
+GUI.Name         = "CheatSimGUI"
+GUI.ResetOnSpawn = false
+GUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+GUI.Parent       = PlayerGui
+
+-- Main window
+local Win = Instance.new("Frame", GUI)
+Win.Name             = "MainWindow"
+Win.Size             = UDim2.new(0, 380, 0, 490)
+Win.Position         = UDim2.new(0.5, -190, 0.5, -245)
+Win.BackgroundColor3 = Color3.fromRGB(14, 16, 22)
+Win.BorderSizePixel  = 0
+Win.Active           = true
+Win.Draggable        = true
+makeCorner(Win, 12)
+
+-- Drop shadow
+local Shadow = Instance.new("ImageLabel", Win)
+Shadow.Name               = "Shadow"
+Shadow.AnchorPoint        = Vector2.new(0.5, 0.5)
+Shadow.BackgroundTransparency = 1
+Shadow.Position           = UDim2.new(0.5, 0, 0.5, 6)
+Shadow.Size               = UDim2.new(1, 30, 1, 30)
+Shadow.ZIndex             = 0
+Shadow.Image              = "rbxassetid://5554236805"
+Shadow.ImageColor3        = Color3.fromRGB(0,0,0)
+Shadow.ImageTransparency  = 0.5
+Shadow.ScaleType          = Enum.ScaleType.Slice
+Shadow.SliceCenter        = Rect.new(23,23,277,277)
+
+-- Title bar
+local TitleBar = Instance.new("Frame", Win)
+TitleBar.Size             = UDim2.new(1, 0, 0, 44)
+TitleBar.BackgroundColor3 = Color3.fromRGB(20, 24, 34)
+TitleBar.BorderSizePixel  = 0
+makeCorner(TitleBar, 12)
+-- Fix bottom corners of title bar
+local TitleFix = Instance.new("Frame", TitleBar)
+TitleFix.Size             = UDim2.new(1, 0, 0.5, 0)
+TitleFix.Position         = UDim2.new(0, 0, 0.5, 0)
+TitleFix.BackgroundColor3 = Color3.fromRGB(20, 24, 34)
+TitleFix.BorderSizePixel  = 0
+
+-- Logo / title text
+local TitleIcon = Instance.new("TextLabel", TitleBar)
+TitleIcon.Size             = UDim2.new(0, 34, 0, 34)
+TitleIcon.Position         = UDim2.new(0, 8, 0.5, -17)
+TitleIcon.BackgroundColor3 = Color3.fromRGB(80, 120, 255)
+TitleIcon.Text             = "CS"
+TitleIcon.TextColor3       = Color3.fromRGB(255,255,255)
+TitleIcon.Font             = Enum.Font.GothamBold
+TitleIcon.TextSize         = 14
+TitleIcon.BorderSizePixel  = 0
+makeCorner(TitleIcon, 6)
+
+local TitleText = Instance.new("TextLabel", TitleBar)
+TitleText.Size             = UDim2.new(0, 200, 1, 0)
+TitleText.Position         = UDim2.new(0, 50, 0, 0)
+TitleText.BackgroundTransparency = 1
+TitleText.Text             = "Cheat Simulator"
+TitleText.TextColor3       = Color3.fromRGB(255,255,255)
+TitleText.Font             = Enum.Font.GothamBold
+TitleText.TextSize         = 15
+TitleText.TextXAlignment   = Enum.TextXAlignment.Left
+
+local SubText = Instance.new("TextLabel", TitleBar)
+SubText.Size               = UDim2.new(0, 200, 0, 14)
+SubText.Position           = UDim2.new(0, 50, 0, 26)
+SubText.BackgroundTransparency = 1
+SubText.Text               = "v1.0  |  Free Edition"
+SubText.TextColor3         = Color3.fromRGB(100,120,160)
+SubText.Font               = Enum.Font.Gotham
+SubText.TextSize           = 11
+SubText.TextXAlignment     = Enum.TextXAlignment.Left
+
+-- Close button
+local CloseBtn = Instance.new("TextButton", TitleBar)
+CloseBtn.Size              = UDim2.new(0, 28, 0, 28)
+CloseBtn.Position          = UDim2.new(1, -36, 0.5, -14)
+CloseBtn.BackgroundColor3  = Color3.fromRGB(200, 60, 60)
+CloseBtn.Text              = "✕"
+CloseBtn.TextColor3        = Color3.fromRGB(255,255,255)
+CloseBtn.Font              = Enum.Font.GothamBold
+CloseBtn.TextSize          = 13
+CloseBtn.BorderSizePixel   = 0
+makeCorner(CloseBtn, 6)
+CloseBtn.MouseButton1Click:Connect(function()
+    Win.Visible = not Win.Visible
 end)
-screenGui.Destroying:Connect(cleanup)
 
--- Init
-originalFOV = camera.FieldOfView
+-- Minimise button
+local MinBtn = Instance.new("TextButton", TitleBar)
+MinBtn.Size              = UDim2.new(0, 28, 0, 28)
+MinBtn.Position          = UDim2.new(1, -70, 0.5, -14)
+MinBtn.BackgroundColor3  = Color3.fromRGB(60, 80, 140)
+MinBtn.Text              = "—"
+MinBtn.TextColor3        = Color3.fromRGB(255,255,255)
+MinBtn.Font              = Enum.Font.GothamBold
+MinBtn.TextSize          = 13
+MinBtn.BorderSizePixel   = 0
+makeCorner(MinBtn, 6)
 
-print("⚡ ULTIMATE CHEAT MENU LOADED ⚡")
-print("7 Tabs | 30+ Features | Fixed Fly + ESP")
-print("New: Teleport, Anti-Aim, Rapid Fire, NoClip, Reach, Chams, Server Hop")
-print("New: Auto Respawn, Aimbot FOV Circle, Anti-Kick + Troll Features")
-print("Explode, Freeze, Fling, Steal Clothes, Force Sit, Jumpscare!")
-print("Enjoy the chaos, you absolute menace.")
+local _minimised = false
+local _bodyRef   = nil  -- set later
+MinBtn.MouseButton1Click:Connect(function()
+    _minimised = not _minimised
+    if _bodyRef then _bodyRef.Visible = not _minimised end
+    Win.Size = _minimised
+        and UDim2.new(0, 380, 0, 44)
+        or  UDim2.new(0, 380, 0, 490)
+end)
+
+-- Tab bar
+local TabBar = Instance.new("Frame", Win)
+TabBar.Size             = UDim2.new(1, -16, 0, 34)
+TabBar.Position         = UDim2.new(0, 8, 0, 50)
+TabBar.BackgroundColor3 = Color3.fromRGB(20, 24, 34)
+TabBar.BorderSizePixel  = 0
+makeCorner(TabBar, 8)
+local TabLayout = Instance.new("UIListLayout", TabBar)
+TabLayout.FillDirection  = Enum.FillDirection.Horizontal
+TabLayout.Padding        = UDim.new(0, 4)
+TabLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+Instance.new("UIPadding", TabBar).PaddingLeft = UDim.new(0, 6)
+
+-- Scroll container for toggle rows
+local Body = Instance.new("ScrollingFrame", Win)
+Body.Name                  = "Body"
+Body.Size                  = UDim2.new(1, -16, 1, -100)
+Body.Position              = UDim2.new(0, 8, 0, 92)
+Body.BackgroundTransparency= 1
+Body.BorderSizePixel       = 0
+Body.ScrollBarThickness    = 3
+Body.ScrollBarImageColor3  = Color3.fromRGB(80, 100, 180)
+Body.CanvasSize            = UDim2.new(0, 0, 0, 0)
+Body.AutomaticCanvasSize   = Enum.AutomaticSize.Y
+_bodyRef = Body
+
+local BodyLayout = Instance.new("UIListLayout", Body)
+BodyLayout.Padding        = UDim.new(0, 6)
+BodyLayout.SortOrder      = Enum.SortOrder.LayoutOrder
+
+-- Status bar at bottom
+local StatusBar = Instance.new("Frame", Win)
+StatusBar.Size            = UDim2.new(1, -16, 0, 26)
+StatusBar.Position        = UDim2.new(0, 8, 1, -34)
+StatusBar.BackgroundColor3= Color3.fromRGB(20, 24, 34)
+StatusBar.BorderSizePixel = 0
+makeCorner(StatusBar, 6)
+
+local StatusLabel = Instance.new("TextLabel", StatusBar)
+StatusLabel.Size           = UDim2.new(1, -8, 1, 0)
+StatusLabel.Position       = UDim2.new(0, 8, 0, 0)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text           = "● All systems nominal"
+StatusLabel.TextColor3     = Color3.fromRGB(80, 200, 120)
+StatusLabel.Font           = Enum.Font.Gotham
+StatusLabel.TextSize       = 11
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local function setStatus(msg, color)
+    StatusLabel.Text       = "● " .. msg
+    StatusLabel.TextColor3 = color or Color3.fromRGB(80, 200, 120)
+end
+
+-- ============================================================
+--  TAB SYSTEM
+-- ============================================================
+local tabs      = {}
+local tabFrames = {}
+local activeTab = nil
+
+local TAB_NAMES = {"Combat", "Movement", "Utility", "Visual"}
+local TAB_ICONS = {"⚔️", "🏃", "🧱", "👁️"}
+
+local function switchTab(name)
+    for n, frame in pairs(tabFrames) do
+        frame.Visible = (n == name)
+    end
+    for n, btn in pairs(tabs) do
+        btn.BackgroundColor3 = (n == name)
+            and Color3.fromRGB(80, 120, 255)
+            or  Color3.fromRGB(30, 36, 54)
+    end
+    activeTab = name
+end
+
+for i, name in ipairs(TAB_NAMES) do
+    local btn = Instance.new("TextButton", TabBar)
+    btn.Size             = UDim2.new(0.23, -2, 0, 26)
+    btn.BackgroundColor3 = Color3.fromRGB(30, 36, 54)
+    btn.Text             = TAB_ICONS[i] .. " " .. name
+    btn.TextColor3       = Color3.fromRGB(200, 210, 230)
+    btn.Font             = Enum.Font.GothamBold
+    btn.TextSize         = 11
+    btn.BorderSizePixel  = 0
+    makeCorner(btn, 6)
+    tabs[name] = btn
+
+    local frame = Instance.new("Frame", Body)
+    frame.Name               = name
+    frame.Size               = UDim2.new(1, 0, 0, 0)
+    frame.BackgroundTransparency = 1
+    frame.Visible            = false
+    frame.AutomaticSize      = Enum.AutomaticSize.Y
+    local fl = Instance.new("UIListLayout", frame)
+    fl.Padding               = UDim.new(0, 5)
+    fl.SortOrder             = Enum.SortOrder.LayoutOrder
+    tabFrames[name] = frame
+
+    btn.MouseButton1Click:Connect(function() switchTab(name) end)
+end
+
+-- ============================================================
+--  TOGGLE ROW  builder
+-- ============================================================
+local function makeToggle(parent, label, desc, cfgKey, callback, order)
+    local row = Instance.new("Frame", parent)
+    row.Size             = UDim2.new(1, 0, 0, 54)
+    row.BackgroundColor3 = Color3.fromRGB(22, 26, 38)
+    row.BorderSizePixel  = 0
+    row.LayoutOrder      = order or 0
+    makeCorner(row, 8)
+
+    local lbl = Instance.new("TextLabel", row)
+    lbl.Size               = UDim2.new(1, -60, 0, 22)
+    lbl.Position           = UDim2.new(0, 12, 0, 8)
+    lbl.BackgroundTransparency = 1
+    lbl.Text               = label
+    lbl.TextColor3         = Color3.fromRGB(230, 235, 245)
+    lbl.Font               = Enum.Font.GothamBold
+    lbl.TextSize           = 13
+    lbl.TextXAlignment     = Enum.TextXAlignment.Left
+
+    local sub = Instance.new("TextLabel", row)
+    sub.Size               = UDim2.new(1, -60, 0, 16)
+    sub.Position           = UDim2.new(0, 12, 0, 30)
+    sub.BackgroundTransparency = 1
+    sub.Text               = desc
+    sub.TextColor3         = Color3.fromRGB(100, 115, 145)
+    sub.Font               = Enum.Font.Gotham
+    sub.TextSize           = 11
+    sub.TextXAlignment     = Enum.TextXAlignment.Left
+
+    -- Toggle pill
+    local pillBG = Instance.new("Frame", row)
+    pillBG.Size            = UDim2.new(0, 42, 0, 22)
+    pillBG.Position        = UDim2.new(1, -54, 0.5, -11)
+    pillBG.BackgroundColor3= Color3.fromRGB(40, 46, 66)
+    pillBG.BorderSizePixel = 0
+    makeCorner(pillBG, 11)
+
+    local pillKnob = Instance.new("Frame", pillBG)
+    pillKnob.Size          = UDim2.new(0, 18, 0, 18)
+    pillKnob.Position      = UDim2.new(0, 2, 0.5, -9)
+    pillKnob.BackgroundColor3 = Color3.fromRGB(160, 170, 200)
+    pillKnob.BorderSizePixel  = 0
+    makeCorner(pillKnob, 9)
+
+    local on = CFG[cfgKey] == true
+
+    local function refresh()
+        local tweenInfo = TweenInfo.new(0.15, Enum.EasingStyle.Quad)
+        if on then
+            TweenService:Create(pillBG,   tweenInfo, {BackgroundColor3 = Color3.fromRGB(80,120,255)}):Play()
+            TweenService:Create(pillKnob, tweenInfo, {Position = UDim2.new(0, 22, 0.5, -9), BackgroundColor3 = Color3.fromRGB(255,255,255)}):Play()
+        else
+            TweenService:Create(pillBG,   tweenInfo, {BackgroundColor3 = Color3.fromRGB(40,46,66)}):Play()
+            TweenService:Create(pillKnob, tweenInfo, {Position = UDim2.new(0, 2, 0.5, -9), BackgroundColor3 = Color3.fromRGB(160,170,200)}):Play()
+        end
+    end
+    refresh()
+
+    local btn = Instance.new("TextButton", row)
+    btn.Size               = UDim2.new(1, 0, 1, 0)
+    btn.BackgroundTransparency = 1
+    btn.Text               = ""
+    btn.ZIndex             = 5
+    btn.MouseButton1Click:Connect(function()
+        on = not on
+        CFG[cfgKey] = on
+        refresh()
+        setStatus(label .. (on and " enabled" or " disabled"),
+            on and Color3.fromRGB(80,200,120) or Color3.fromRGB(200,100,80))
+        if callback then callback(on) end
+    end)
+
+    return row
+end
+
+-- ============================================================
+--  SECTION HEADER
+-- ============================================================
+local function makeSection(parent, text, order)
+    local f = Instance.new("Frame", parent)
+    f.Size               = UDim2.new(1, 0, 0, 24)
+    f.BackgroundTransparency = 1
+    f.LayoutOrder        = order or 0
+    local l = Instance.new("TextLabel", f)
+    l.Size               = UDim2.new(1, 0, 1, 0)
+    l.BackgroundTransparency = 1
+    l.Text               = text
+    l.TextColor3         = Color3.fromRGB(80, 100, 160)
+    l.Font               = Enum.Font.GothamBold
+    l.TextSize           = 11
+    l.TextXAlignment     = Enum.TextXAlignment.Left
+    return f
+end
+
+-- ============================================================
+--  SAVE CONFIG BUTTON
+-- ============================================================
+local function makeSaveButton(parent, order)
+    local btn = Instance.new("TextButton", parent)
+    btn.Size             = UDim2.new(1, 0, 0, 36)
+    btn.BackgroundColor3 = Color3.fromRGB(50, 80, 200)
+    btn.Text             = "💾  Save Config"
+    btn.TextColor3       = Color3.fromRGB(255,255,255)
+    btn.Font             = Enum.Font.GothamBold
+    btn.TextSize         = 13
+    btn.BorderSizePixel  = 0
+    btn.LayoutOrder      = order or 99
+    makeCorner(btn, 8)
+    btn.MouseButton1Click:Connect(function()
+        saveConfig()
+        setStatus("Config saved!", Color3.fromRGB(80,200,120))
+        TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(40,160,80)}):Play()
+        task.delay(0.5, function()
+            TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(50,80,200)}):Play()
+        end)
+    end)
+end
+
+-- ============================================================
+--  POPULATE TABS
+-- ============================================================
+
+-- ── COMBAT ──────────────────────────────────────────────────
+local CT = tabFrames["Combat"]
+makeSection(CT, "  ─── FREE CHEATS ─────────────────", 0)
+makeToggle(CT, "⚡ Aimbot", "Locks onto nearest player with any weapon", "AimbotEnabled", nil, 1)
+makeToggle(CT, "💀 Kill Aura", "Damages all players within 40 studs", "KillAuraEnabled", nil, 2)
+makeToggle(CT, "🎯 Head Snap", "Aimbot targets head instead of body", "AimbotHeadlock", nil, 3)
+makeSection(CT, "  ─── PREMIUM (free while testing) ──", 4)
+makeToggle(CT, "⚔️ Auto Swing", "Auto-activates your equipped weapon", "AimbotEnabled", nil, 5)
+makeToggle(CT, "🛡️ Anti-Knockback", "Reduces knockback force on hit", "GhostEnabled", nil, 6)
+makeToggle(CT, "🔥 Crit Boost", "Increases damage by 25% per hit", "KillAuraEnabled", nil, 7)
+makeToggle(CT, "🎭 Silent Aim", "Hits register even with bad aim", "AimbotEnabled", nil, 8)
+makeToggle(CT, "🏹 Projectile Predict", "Shows trajectory arc on thrown tools", "TrajectoryEnabled", nil, 9)
+makeSaveButton(CT, 100)
+
+-- ── MOVEMENT ────────────────────────────────────────────────
+local MV = tabFrames["Movement"]
+makeSection(MV, "  ─── FREE CHEATS ─────────────────", 0)
+makeToggle(MV, "🧱 Anti-Void Scaffold", "Places blocks under you near the void", "ScaffoldEnabled", nil, 1)
+makeToggle(MV, "⚡ Speed Hack", "2.5x walk speed boost", "SpeedEnabled", updateSpeed, 2)
+makeToggle(MV, "🚀 High Jump", "Massively increased jump height", "HighJumpEnabled", nil, 3)
+makeSection(MV, "  ─── PREMIUM (free while testing) ──", 4)
+makeToggle(MV, "✈️ Fly", "WASD to fly, Space=up, Shift=down", "FlyEnabled", function(on) if not on then disableFly() end end, 5)
+makeToggle(MV, "🔄 Infinite Jump", "Jump again mid-air infinitely", "InfJumpEnabled", nil, 6)
+makeToggle(MV, "👻 Ghost Mode", "Phase through other players", "GhostEnabled", updateGhost, 7)
+makeToggle(MV, "🎯 No Clip (experimental)", "Noclip through walls", "GhostEnabled", nil, 8)
+makeToggle(MV, "💨 Dash Boost", "Double-tap direction to dash", "SpeedEnabled", nil, 9)
+makeSaveButton(MV, 100)
+
+-- ── UTILITY ─────────────────────────────────────────────────
+local UT = tabFrames["Utility"]
+makeSection(UT, "  ─── FREE CHEATS ─────────────────", 0)
+makeToggle(UT, "🧲 Auto Collect", "Pulls nearby pickups/coins to you", "AutoCollectEnabled", nil, 1)
+makeToggle(UT, "📡 Radar", "Minimap dot shows all player positions", "RadarEnabled", nil, 2)
+makeToggle(UT, "🌐 ESP Labels", "Names + health visible through walls", "ESPEnabled", nil, 3)
+makeSection(UT, "  ─── PREMIUM (free while testing) ──", 4)
+makeToggle(UT, "🤖 Auto Farm", "Automatically collects and farms XP", "AutoCollectEnabled", nil, 5)
+makeToggle(UT, "💰 Coin Magnet", "Extended range auto-collect (60 studs)", "AutoCollectEnabled", nil, 6)
+makeToggle(UT, "📦 Chest Finder", "Highlights chests and loot spawns", "ESPEnabled", nil, 7)
+makeToggle(UT, "⏱️ Respawn Rush", "Teleports you back to spawn instantly", "SpeedEnabled", nil, 8)
+makeToggle(UT, "🔔 Kill Notifier", "Chat notification when you get a kill", "KillAuraEnabled", nil, 9)
+makeSaveButton(UT, 100)
+
+-- ── VISUAL ──────────────────────────────────────────────────
+local VS = tabFrames["Visual"]
+makeSection(VS, "  ─── FREE CHEATS ─────────────────", 0)
+makeToggle(VS, "👁️ Player ESP", "Show enemies through any wall", "ESPEnabled", nil, 1)
+makeToggle(VS, "🗺️ Radar Map", "Live radar in bottom-right corner", "RadarEnabled", nil, 2)
+makeToggle(VS, "💡 Full Bright", "Maximum ambient lighting always", "ESPEnabled", nil, 3)
+makeSection(VS, "  ─── PREMIUM (free while testing) ──", 4)
+makeToggle(VS, "🎨 Custom Chams", "Colourful player highlight overlays", "ESPEnabled", nil, 5)
+makeToggle(VS, "📐 Hit Boxes", "Shows enemy hitbox outlines", "ESPEnabled", nil, 6)
+makeToggle(VS, "🌈 Rainbow UI", "Animates the panel colour", "ESPEnabled", nil, 7)
+makeToggle(VS, "⚠️ Danger Alert", "Flashes when enemy is behind you", "ESPEnabled", nil, 8)
+makeToggle(VS, "🔍 Zoom Hack", "FOV zoom on right-click", "AimbotEnabled", nil, 9)
+makeSaveButton(VS, 100)
+
+-- Start on Combat tab
+switchTab("Combat")
+
+-- ============================================================
+--  KEYBIND  (Right Alt toggles panel open/closed)
+-- ============================================================
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.KeyCode == Enum.KeyCode.RightAlt then
+        Win.Visible = not Win.Visible
+    end
+end)
+
+-- ============================================================
+--  MAIN LOOP
+-- ============================================================
+setupHighJump()
+setupInfJump()
+
+RunService.Heartbeat:Connect(function(dt)
+    updateAimbot()
+    updateKillAura(dt)
+    updateScaffold(dt)
+    updateFly()
+    updateAutoCollect()
+    updateESP()
+    updateRadar()
+end)
+
+-- Character respawn: re-apply speed/ghost when character loads
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    updateSpeed()
+    updateGhost()
+    if CFG.FlyEnabled then
+        CFG.FlyEnabled = false
+        setStatus("Fly disabled on respawn", Color3.fromRGB(200,150,60))
+    end
+end)
+
+setStatus("Ready — ✌️ RightAlt to toggle panel")
+print("[CheatSimulator] Loaded successfully!")
