@@ -1,19 +1,33 @@
 -- ============================================================
---  CHEAT SIMULATOR · ALL-IN-ONE v3 (server + client + mobile)
---  INSTALL: place this ONE Script in ServerScriptService. Done.
+--  CHEAT SIMULATOR · ALL-IN-ONE v4 PRO  (server + client + mobile)
+--  ─────────────────────────────────────────────────────────
+--  INSTALL: place this ONE Script in ServerScriptService,
+--  publish, then join a BRAND-NEW server. Done.
 --
---  TEMPLATE INTEGRATION (scaffold using real inventory blocks):
---  Block items must be Tools in the Backpack, e.g. "Red Wool".
---  If your Bedwars template places blocks through a RemoteEvent,
---  add its name to PLACE_REMOTE_NAMES below and scaffold will
---  fire it. Tool:Activate() is also tried as a fallback.
+--  ✅ v4 fixes:
+--  • Combat works in real multiplayer (per-target cooldown,
+--    ForceFields smashed, loud warning if server half missing)
+--  • Aimbot runs AFTER Roblox's camera so it always wins
+--  • LOS check only applies to Aimbot — Kill Aura hits through
+--    leaves/walls now
+--  • 🟢/🔴 server status dot in the title bar
+--  • 🔬 Remote Doctor (F9 console) lists your template's
+--    damage/place remotes so you can wire them in
+--
+--  TEMPLATE INTEGRATION (edit these at the top of CLIENT half):
+--  • DAMAGE_ADAPTER.remoteName  → your template's damage remote
+--  • PLACE_REMOTE_NAMES         → your template's block-place remote
+--  • BLOCK_KEYWORDS             → names of block Tools in Backpack
+--
+--  PC    : RightAlt = panel · F/G/N/X/K/R/B = hotkeys
+--  MOBILE: floating "CS" button = panel · touch fly buttons
 -- ============================================================
 
 local RunService = game:GetService("RunService")
 
 if RunService:IsClient() then
 -- ############################################################
---  CLIENT HALF
+--  CLIENT HALF (auto-installed into every player)
 -- ############################################################
 
     -- ── C1 · SERVICES & DEVICE ──────────────────────────────
@@ -35,9 +49,14 @@ if RunService:IsClient() then
     local function R(name) return Remotes and Remotes:FindFirstChild(name) end
 
     -- ── C2 · CONFIG + TEMPLATE INTEGRATION ──────────────────
+    -- Block items must be Tools in Backpack, e.g. "Red Wool"
     local BLOCK_KEYWORDS     = {"wool","wood","plank","stone","brick","oak","concrete","marble"}
     local PLACE_REMOTE_NAMES = {"PlaceBlock","PlaceEvent","Place","Build","BlockPlace","BridgePlace"}
-    local TRY_TEMPLATE_REMOTE = true -- set false if you hardcode the remote below
+    local TRY_TEMPLATE_REMOTE = true
+
+    -- ⚡ COMBAT WIRING: run the Remote Doctor (F9), find your
+    -- template's damage remote, put its exact name here:
+    local DAMAGE_ADAPTER = { remoteName = nil, argOrder = "targetFirst" } -- or "damageFirst"
 
     local CFG = {
         Aimbot=false, AimbotRange=120, AimbotSmooth=0.18, AimbotHead=true,
@@ -66,7 +85,7 @@ if RunService:IsClient() then
         orange=Color3.fromRGB(255,150,50), black=Color3.fromRGB(70,70,80),
     }
 
-    -- ── C3 · HELPERS ────────────────────────────────────────
+    -- ── C3 · HELPERS + CONFIG REGISTRY ──────────────────────
     local function getChar() return LocalPlayer.Character end
     local function getHRP()  local c = getChar() return c and c:FindFirstChild("HumanoidRootPart") end
     local function getHum()  local c = getChar() return c and c:FindFirstChildOfClass("Humanoid") end
@@ -84,7 +103,7 @@ if RunService:IsClient() then
         for _, fn in ipairs(cfgCallbacks[key] or {}) do safe(function() fn(value) end) end
     end
 
-    -- movement control hook (so auto-walk never fights the player)
+    -- movement hook so auto-walk never fights the player
     local controls
     pcall(function()
         controls = require(LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule")):GetControls()
@@ -160,7 +179,7 @@ if RunService:IsClient() then
                     local n = t.Name:lower()
                     for _, kw in ipairs(BLOCK_KEYWORDS) do
                         if n:find(kw) then
-                            if n:find("wool") then return t end -- wool = bedwars priority
+                            if n:find("wool") then return t end
                             fallback = fallback or t
                         end
                     end
@@ -208,7 +227,6 @@ if RunService:IsClient() then
         end)
     end
 
-    -- places a block using your inventory tool (color-matched) + safety net
     local function placeSmartBlock(size, cframe, life, name)
         local tool = CFG.ScaffoldInv and findPlaceableBlock() or nil
         local color = toolBlockColor(tool) or myTeamColor()
@@ -227,7 +245,43 @@ if RunService:IsClient() then
         task.delay(life, function() if b.Parent then b:Destroy() end end)
     end
 
-    -- ── C6 · TARGETING (sticky + LOS) ───────────────────────
+    -- ── C6 · DAMAGE + TARGETING ─────────────────────────────
+    local lastDamage = {}
+    local _adapterRemote, _warnedNoServer = nil, false
+
+    local function dealDamage(targetChar, amount)
+        safe(function()
+            local adapter = nil
+            if DAMAGE_ADAPTER.remoteName then
+                if not (_adapterRemote and _adapterRemote.Parent) then
+                    _adapterRemote = ReplicatedStorage:FindFirstChild(DAMAGE_ADAPTER.remoteName, true)
+                end
+                adapter = _adapterRemote
+            end
+            if adapter then
+                if DAMAGE_ADAPTER.argOrder == "damageFirst" then
+                    adapter:FireServer(amount, targetChar)
+                else
+                    adapter:FireServer(targetChar, amount)
+                end
+            else
+                local remote = R("DamageRemote")
+                if remote then
+                    remote:FireServer(targetChar, amount)
+                else
+                    -- ⚠️ Studio-only fallback — does NOTHING on a real server
+                    local hum = targetChar and targetChar:FindFirstChildOfClass("Humanoid")
+                    if hum then hum:TakeDamage(amount) end
+                    if not _warnedNoServer then
+                        _warnedNoServer = true
+                        toast("🚨 SERVER NOT FOUND — republish & join a NEW server!", Color3.fromRGB(200,40,40))
+                    end
+                end
+            end
+            lastDamage[targetChar] = os.clock()
+        end)
+    end
+
     local function canSee(part)
         local hrp = getHRP()
         if not (hrp and part and part.Parent) then return false end
@@ -238,19 +292,19 @@ if RunService:IsClient() then
     end
 
     local curTarget = nil
-    local function targetValid(part, range)
+    local function targetValid(part, range, useLOS)
         if not (part and part.Parent) then return false end
         local hum = part.Parent:FindFirstChildOfClass("Humanoid")
         if not hum or hum.Health <= 0 then return false end
         local hrp = getHRP()
         if not hrp then return false end
         if (hrp.Position - part.Position).Magnitude > range then return false end
-        if CFG.AimbotVisible and not canSee(part) then return false end
+        if useLOS and not canSee(part) then return false end
         return true
     end
 
-    local function getTarget(range)
-        if targetValid(curTarget, range) then return curTarget end -- stickiness
+    local function getTarget(range, useLOS)
+        if targetValid(curTarget, range, useLOS) then return curTarget end -- stickiness
         curTarget = nil
         local hrp = getHRP()
         if not hrp then return nil end
@@ -263,7 +317,7 @@ if RunService:IsClient() then
                 local hum = p.Character:FindFirstChildOfClass("Humanoid")
                 if part and hum and hum.Health > 0 then
                     local d = (hrp.Position - part.Position).Magnitude
-                    if d < bd and ((not CFG.AimbotVisible) or canSee(part)) then
+                    if d < bd and ((not useLOS) or canSee(part)) then
                         best = part; bd = d
                     end
                 end
@@ -271,20 +325,6 @@ if RunService:IsClient() then
         end
         curTarget = best
         return best
-    end
-
-    local lastDamage = {}
-    local function dealDamage(targetChar, amount)
-        safe(function()
-            local remote = R("DamageRemote")
-            if remote then
-                remote:FireServer(targetChar, amount)
-            else
-                local hum = targetChar:FindFirstChildOfClass("Humanoid")
-                if hum then hum:TakeDamage(amount) end
-            end
-            lastDamage[targetChar] = os.clock()
-        end)
     end
 
     local function crosshairEnemy(range)
@@ -313,11 +353,11 @@ if RunService:IsClient() then
 
     function tickAimbot()
         if not CFG.Aimbot then return end
-        local part = getTarget(CFG.AimbotRange)
+        local part = getTarget(CFG.AimbotRange, CFG.AimbotVisible)
         if not part then return end
         local dir = (part.Position - cam.CFrame.Position).Unit
         local dot = math.clamp(cam.CFrame.LookVector:Dot(dir), -1, 1)
-        if math.deg(math.acos(dot)) > CFG.AimbotFOV then return end -- outside FOV = no lock
+        if math.deg(math.acos(dot)) > CFG.AimbotFOV then return end
         cam.CFrame = cam.CFrame:Lerp(CFrame.lookAt(cam.CFrame.Position, part.Position), CFG.AimbotSmooth)
     end
 
@@ -336,7 +376,7 @@ if RunService:IsClient() then
         local hrp = getHRP()
         if not hrp then stopChase() return end
         local range = CFG.KillAuraRange * (CFG.RangeExtend and 1.6 or 1)
-        local target = getTarget(range * 2.5) -- chase radius is wider
+        local target = getTarget(range * 2.5, false)
         if not target then stopChase() return end
         local dist = (hrp.Position - target.Position).Magnitude
         local dmg = CFG.KillAuraDmg * (CFG.CritBoost and 1.25 or 1)
@@ -366,10 +406,8 @@ if RunService:IsClient() then
         _swingTimer += dt
         if _swingTimer < CFG.KillAuraRate * 0.6 then return end
         _swingTimer = 0
-        local target = getTarget(25)
-        if target then
-            dealDamage(target.Parent, CFG.KillAuraDmg * (CFG.CritBoost and 1.25 or 1))
-        end
+        local target = getTarget(25, false)
+        if target then dealDamage(target.Parent, CFG.KillAuraDmg * (CFG.CritBoost and 1.25 or 1)) end
     end
 
     function tickTriggerBot(dt)
@@ -434,7 +472,7 @@ if RunService:IsClient() then
         end
     end
 
-    -- FLY (smoothed, mobile buttons)
+    -- FLY · mobile touch buttons appear while flying
     local FLY_BTNS = {
         {name="CSFlyFwd", label="▲", flag="F"}, {name="CSFlyBack", label="▼", flag="B"},
         {name="CSFlyLeft", label="◀", flag="L"}, {name="CSFlyRight", label="▶", flag="R"},
@@ -443,7 +481,10 @@ if RunService:IsClient() then
     local flyTouch = {F=false, B=false, L=false, R=false, U=false, D=false}
     local function flyBtnHandler(actionName, inputState)
         for _, d in ipairs(FLY_BTNS) do
-            if d.name == actionName then flyTouch[d.flag] = (inputState == Enum.UserInputState.Begin) break end
+            if d.name == actionName then
+                flyTouch[d.flag] = (inputState == Enum.UserInputState.Begin)
+                break
+            end
         end
         return Enum.ContextActionResult.Sink
     end
@@ -504,7 +545,7 @@ if RunService:IsClient() then
         if flyTouch.U or UIS:IsKeyDown(Enum.KeyCode.Space)     then mv += Vector3.yAxis  end
         if flyTouch.D or UIS:IsKeyDown(Enum.KeyCode.LeftShift) then mv -= Vector3.yAxis  end
         local desired = mv.Magnitude > 0 and mv.Unit * CFG.FlySpeed or Vector3.zero
-        _flyVel = _flyVel:Lerp(desired, 0.25) -- smooth acceleration
+        _flyVel = _flyVel:Lerp(desired, 0.25)
         _flyLV.VectorVelocity = _flyVel
         _flyAO.CFrame = cf
     end
@@ -561,7 +602,7 @@ if RunService:IsClient() then
             hl.OutlineTransparency = 0
             hl.Parent = best
             task.delay(2, function() if hl.Parent then hl:Destroy() end end)
-            if bd > 6 and not playerMoving() then -- never fight your controls
+            if bd > 6 and not playerMoving() then
                 _farmMoveTimer -= 1.5
                 if _farmMoveTimer <= 0 then
                     _farmMoveTimer = 0.25
@@ -645,7 +686,9 @@ if RunService:IsClient() then
             elseif p.Character then
                 local hum = p.Character:FindFirstChildOfClass("Humanoid")
                 local ohrp = p.Character:FindFirstChild("HumanoidRootPart")
-                local lbl, dist, hb = bb:FindFirstChild("ESPLbl"), bb:FindFirstChild("ESPDist"), bb:FindFirstChild("HBG") and bb.HBG:FindFirstChild("HB")
+                local lbl = bb:FindFirstChild("ESPLbl")
+                local dist = bb:FindFirstChild("ESPDist")
+                local hb = bb:FindFirstChild("HBG") and bb.HBG:FindFirstChild("HB")
                 if lbl and hum then
                     local col = p.Team and p.Team.TeamColor.Color or Color3.fromRGB(255,80,80)
                     lbl.TextColor3 = col
@@ -656,7 +699,7 @@ if RunService:IsClient() then
                     if hb then
                         local f = math.clamp(hum.Health / math.max(1, hum.MaxHealth), 0, 1)
                         hb.Size = UDim2.new(f, 0, 1, 0)
-                        hb.BackgroundColor3 = Color3.fromRGB(255, 80, 80):Lerp(Color3.fromRGB(80,255,100), f)
+                        hb.BackgroundColor3 = Color3.fromRGB(255,80,80):Lerp(Color3.fromRGB(80,255,100), f)
                     end
                 end
             end
@@ -685,9 +728,9 @@ if RunService:IsClient() then
             return
         end
         local hrp = getHRP()
-        for _, e in ipairs(_bedBoards) do -- live distance
+        for _, e in ipairs(_bedBoards) do
             if e.part.Parent and hrp then
-                e.lbl.Text = "🛏️ " .. e.team .. " • " .. math.floor((e.part.Position - hrp.Position).Magnitude) .. "m"
+                e.lbl.Text = "🛏️ " .. string.upper(e.team) .. " • " .. math.floor((e.part.Position - hrp.Position).Magnitude) .. "m"
             end
         end
         _bedTimer -= dt
@@ -700,7 +743,7 @@ if RunService:IsClient() then
                 if n:find("bed") or n:find("target") then table.insert(found, obj) end
             end
         end
-        for prev in pairs(_bedPrev) do -- destroyed-bed detection
+        for prev in pairs(_bedPrev) do
             local still = false
             for _, obj in ipairs(found) do if obj == prev then still = true break end end
             if not still then
@@ -835,6 +878,24 @@ if RunService:IsClient() then
         you.BackgroundColor3 = Color3.fromRGB(80,255,100)
         you.BorderSizePixel = 0
         Instance.new("UICorner", you).CornerRadius = UDim.new(1,0)
+        local lbl = Instance.new("TextLabel", bg)
+        lbl.Name = "Title"
+        lbl.Size = UDim2.new(1,0,0,14)
+        lbl.Position = UDim2.new(0,0,0,4)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = "RADAR"
+        lbl.TextColor3 = Color3.fromRGB(80,120,255)
+        lbl.Font = Enum.Font.GothamBold
+        lbl.TextSize = 10
+        local cnt = Instance.new("TextLabel", bg)
+        cnt.Name = "Count"
+        cnt.Size = UDim2.new(1,0,0,14)
+        cnt.Position = UDim2.new(0,0,1,-18)
+        cnt.BackgroundTransparency = 1
+        cnt.Text = ""
+        cnt.TextColor3 = Color3.fromRGB(200,200,220)
+        cnt.Font = Enum.Font.GothamBold
+        cnt.TextSize = 10
     end
 
     local function tickRadar()
@@ -849,10 +910,12 @@ if RunService:IsClient() then
         for _, d in ipairs(bg:GetChildren()) do
             if d.Name == "RDot" or d.Name == "BDot" then d:Destroy() end
         end
+        local count = 0
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= LocalPlayer and p.Character then
                 local ohrp = p.Character:FindFirstChild("HumanoidRootPart")
                 if ohrp then
+                    count += 1
                     local rel = cam.CFrame:VectorToObjectSpace(ohrp.Position - hrp.Position)
                     local dot = Instance.new("Frame", bg)
                     dot.Name = "RDot"
@@ -864,7 +927,9 @@ if RunService:IsClient() then
                 end
             end
         end
-        if CFG.BedESP then -- bed dots
+        local cnt = bg:FindFirstChild("Count")
+        if cnt then cnt.Text = count .. " NEARBY" end
+        if CFG.BedESP then
             for _, e in ipairs(_bedBoards) do
                 if e.part.Parent then
                     local rel = cam.CFrame:VectorToObjectSpace(e.part.Position - hrp.Position)
@@ -897,10 +962,20 @@ if RunService:IsClient() then
         end
     end
 
-    local dangerFrame
+    local dangerGui = Instance.new("ScreenGui")
+    dangerGui.Name = "CSDanger"
+    dangerGui.IgnoreGuiInset = true
+    dangerGui.ResetOnSpawn = false
+    dangerGui.DisplayOrder = 5
+    dangerGui.Parent = PlayerGui
+    local dangerFrame = Instance.new("Frame", dangerGui)
+    dangerFrame.Size = UDim2.new(1,0,1,0)
+    dangerFrame.BackgroundColor3 = Color3.fromRGB(255,0,0)
+    dangerFrame.BackgroundTransparency = 1
+    dangerFrame.BorderSizePixel = 0
     local _dangerCooldown = 0
     local function tickDanger(dt)
-        if not CFG.DangerAlert or not dangerFrame then return end
+        if not CFG.DangerAlert then return end
         _dangerCooldown = math.max(0, _dangerCooldown - dt)
         if _dangerCooldown > 0 then return end
         local hrp = getHRP()
@@ -952,7 +1027,6 @@ if RunService:IsClient() then
         end
     end
 
-    -- kill notify + streaks
     local killConns = {}
     local _streak, _lastKillT = 0, 0
     local function hookKillNotify(p)
@@ -1149,7 +1223,7 @@ if RunService:IsClient() then
     _winStroke.Color = BASE_STROKE
     _winStroke.Thickness = 1.5
 
-    -- locked-target HUD (top of screen)
+    -- locked-target HUD
     TargetLbl = Instance.new("TextLabel", SG)
     TargetLbl.Size = UDim2.new(0, 200, 0, 20)
     TargetLbl.Position = UDim2.new(0.5, -100, 0, 8)
@@ -1250,6 +1324,21 @@ if RunService:IsClient() then
     SubLbl.Font = Enum.Font.Gotham
     SubLbl.TextSize = 11
     SubLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+    -- 🟢/🔴 server status dot
+    local ServerDot = Instance.new("Frame", TBar)
+    ServerDot.Size = UDim2.new(0,10,0,10)
+    ServerDot.Position = UDim2.new(1,-145,0.5,-5)
+    ServerDot.BackgroundColor3 = Color3.fromRGB(255,170,40)
+    ServerDot.BorderSizePixel = 0
+    Instance.new("UICorner", ServerDot).CornerRadius = UDim.new(1,0)
+    task.delay(5, function()
+        local alive = R("DamageRemote") ~= nil
+        ServerDot.BackgroundColor3 = alive and Color3.fromRGB(30,200,90) or Color3.fromRGB(230,50,50)
+        if not alive then
+            toast("🚨 Server half missing — republish & join a NEW server!", Color3.fromRGB(200,40,40))
+        end
+    end)
 
     local StatPill = Instance.new("Frame", TBar)
     StatPill.Size = UDim2.new(0,70,0,20)
@@ -1579,7 +1668,7 @@ if RunService:IsClient() then
     -- COMBAT
     local CT = getTab("Combat")
     mkSection(CT, "── FREE ─────────────────────────────", 0)
-    mkToggle(CT, "⚡", "Aimbot", "Smart lock • FOV-limited • sticky", "Aimbot", 1)
+    mkToggle(CT, "⚡", "Aimbot", "Camera-proof lock • FOV • sticky", "Aimbot", 1)
     mkSlider(CT, "Aimbot FOV", 15, 180, "AimbotFOV", 2, "°")
     mkToggle(CT, "🎯", "Head Snap", "Aimbot targets the head", "AimbotHead", 3)
     mkToggle(CT, "👁️", "Visible Only", "Won't lock through walls", "AimbotVisible", 4)
@@ -1686,9 +1775,15 @@ if RunService:IsClient() then
         if cfgRemote then cfgRemote:FireServer("load") end
     end
 
-    -- ── C13 · MAIN LOOP ─────────────────────────────────────
+    -- ── C13 · MAIN LOOP (aimbot = camera-proof) ─────────────
+    -- Aimbot runs AFTER the default camera script each frame so it always wins
+    RunService:BindToRenderStep("CS_Aimbot", Enum.RenderPriority.Camera.Value + 1, function()
+        cam = Workspace.CurrentCamera
+        safe(tickAimbot)
+    end)
+
     RunService.Heartbeat:Connect(function(dt)
-        safe(function() tickAimbot() end)
+        cam = Workspace.CurrentCamera -- camera gets recreated on respawn
         safe(function() tickKillAura(dt) end)
         safe(function() tickAutoSwing(dt) end)
         safe(function() tickTriggerBot(dt) end)
@@ -1708,7 +1803,28 @@ if RunService:IsClient() then
         safe(function() tickTargetLabel() end)
     end)
 
-    print("[CheatSimulator] PRO edition loaded — smart scaffold, auto chase, sticky aimbot.")
+    -- 🔬 REMOTE DOCTOR — lists your template's combat remotes in F9
+    task.delay(6, function()
+        safe(function()
+            print("========== CS REMOTE DOCTOR ==========")
+            print("CheatSim remotes found:", Remotes ~= nil)
+            local kws = {"damage","hit","attack","sword","combat","melee","strike","swing","inflict","place","block"}
+            for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+                if obj:IsA("RemoteEvent") then
+                    local n = obj.Name:lower()
+                    for _, kw in ipairs(kws) do
+                        if n:find(kw) then
+                            print("  candidate remote →", obj:GetFullName())
+                            break
+                        end
+                    end
+                end
+            end
+            print("======================================")
+        end)
+    end)
+
+    print("[CheatSimulator] PRO v4 loaded — per-target damage, camera-proof aimbot, ForceField smash.")
 
 else
 -- ############################################################
@@ -1719,8 +1835,11 @@ else
     local DataStoreService  = game:GetService("DataStoreService")
     local PhysicsService    = game:GetService("PhysicsService")
     local TweenService      = game:GetService("TweenService")
+    local Workspace         = game:GetService("Workspace")
 
-    local MAX_RANGE, MAX_DMG, COOLDOWN = 60, 15, 0.25
+    -- ⚙️ per-target cooldown — Kill Aura + Auto Swing + Silent Aim
+    -- no longer eat each other's hits
+    local MAX_RANGE, MAX_DMG, COOLDOWN = 120, 25, 0.12
     local BLOCK_TEAM_DAMAGE = false
     local RESOURCE_FOLDER   = "Resources"
     local RESOURCE_NAMES    = {"coin","gem","drop","iron","gold","emerald","diamond"}
@@ -1728,6 +1847,7 @@ else
     local DEFAULT_RESPAWN   = 5
     local FAST_RESPAWN      = 1
 
+    -- ── S2 · REMOTES ────────────────────────────────────────
     local remotes = Instance.new("Folder")
     remotes.Name = "CheatSimRemotes"
     remotes.Parent = ReplicatedStorage
@@ -1744,24 +1864,42 @@ else
     local ConfigRemote      = mkRemote("ConfigRemote")
     local ConfigSync        = mkRemote("ConfigSync")
 
-    local lastHit = {}
+    -- ── S3 · DAMAGE (per-target cooldown + ForceField smash) ─
+    local lastHit = {}  -- [player][targetChar] = time
+
+    local function findHumanoid(model)
+        return model:FindFirstChildOfClass("Humanoid")
+            or model:FindFirstChildWhichIsA("Humanoid", true)
+    end
+
     DamageRemote.OnServerEvent:Connect(function(player, targetChar, amount)
         if typeof(targetChar) ~= "Instance" or not targetChar:IsA("Model") then return end
-        local hum = targetChar:FindFirstChildOfClass("Humanoid")
+        local hum = findHumanoid(targetChar)
         local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
-        local myHRP = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+            or targetChar:FindFirstChildWhichIsA("BasePart", true)
+        local myChar = player.Character
+        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
         if not (hum and targetHRP and myHRP) or hum.Health <= 0 then return end
         local targetPlayer = Players:GetPlayerFromCharacter(targetChar)
         if targetPlayer == player then return end
         if BLOCK_TEAM_DAMAGE and targetPlayer and targetPlayer.Team ~= nil
             and targetPlayer.Team == player.Team then return end
         if (targetHRP.Position - myHRP.Position).Magnitude > MAX_RANGE then return end
+
+        -- PER-TARGET cooldown
+        lastHit[player] = lastHit[player] or {}
         local t = os.clock()
-        if (lastHit[player] or 0) + COOLDOWN > t then return end
-        lastHit[player] = t
+        if (lastHit[player][targetChar] or 0) + COOLDOWN > t then return end
+        lastHit[player][targetChar] = t
+
+        -- ForceFields silently eat TakeDamage — smash them
+        for _, ff in ipairs(targetChar:GetDescendants()) do
+            if ff:IsA("ForceField") then ff:Destroy() end
+        end
         hum:TakeDamage(math.clamp(tonumber(amount) or 0, 0, MAX_DMG))
     end)
 
+    -- ── S4 · GHOST MODE ─────────────────────────────────────
     pcall(function()
         PhysicsService:RegisterCollisionGroup("Ghosted")
         PhysicsService:CollisionGroupSetCollidable("Ghosted", "Default", false)
@@ -1778,6 +1916,7 @@ else
         end
     end)
 
+    -- ── S5 · FAST RESPAWN ───────────────────────────────────
     local fastUsers = {}
     local function syncRespawnTime()
         local any = false
@@ -1789,6 +1928,7 @@ else
         syncRespawnTime()
     end)
 
+    -- ── S6 · COIN MAGNET (tweened pull) ─────────────────────
     local pulled = setmetatable({}, {__mode = "k"})
     MagnetRemote.OnServerEvent:Connect(function(player)
         local char = player.Character
@@ -1818,6 +1958,7 @@ else
         end
     end)
 
+    -- ── S7 · CONFIG SAVING ──────────────────────────────────
     local store
     pcall(function() store = DataStoreService:GetDataStore("CheatSim_Configs") end)
     ConfigRemote.OnServerEvent:Connect(function(player, action, data)
@@ -1836,6 +1977,7 @@ else
         end
     end)
 
+    -- ── S8 · CLIENT INSTALLER ───────────────────────────────
     Players.PlayerAdded:Connect(function(player)
         player.CharacterAdded:Connect(function(char)
             task.wait(0.3)
@@ -1876,5 +2018,5 @@ else
         end
     end)
 
-    print("[CheatSimulator] Server ready (PRO).")
+    print("[CheatSimulator] Server ready (PRO v4).")
 end
